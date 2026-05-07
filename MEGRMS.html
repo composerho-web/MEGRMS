@@ -53,7 +53,7 @@
           "📜 學位論文撰寫中", "📌 其他"
         ];
 
-        // 🌟 您的 API 網址 (維持不變) 
+        // 🌟 您的 API 網址 (更新為最新版)
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
 
         const syncToBackend = (action, data) => {
@@ -64,11 +64,14 @@
         };
 
         const calculateDaysLeft = (targetDate) => {
+            if (!targetDate) return null;
             const today = new Date();
             today.setHours(0,0,0,0);
             const target = new Date(targetDate);
+            if (isNaN(target.getTime())) return null; // 避免無效日期導致錯誤
             target.setHours(0,0,0,0);
-            return Math.floor((target - today) / (1000 * 60000 * 60 * 24));
+            // 改用 Math.round 避免時區與日光節約時間造成的無條件捨去歸零問題
+            return Math.round((target - today) / (1000 * 60000 * 60 * 24));
         };
 
         const StatusBadge = ({ status }) => {
@@ -732,6 +735,15 @@
             setNewTitle('');
           };
 
+          // 🌟 新增：計算看板統計數據
+          const totalProjects = projects.length;
+          const totalStudents = students.length;
+          const confSubmitted = projects.filter(p => p.status.includes('研討會已投稿')).length;
+          const journalSubmitted = projects.filter(p => p.status.includes('期刊已投稿')).length;
+          const pilotCompleted = projects.filter(p => p.status.includes('PILOT完成')).length;
+          const gameDev = projects.filter(p => p.status.includes('發展中')).length;
+          const journalWriting = projects.filter(p => p.status.includes('寫作中')).length;
+
           return (
             <div className="space-y-8 animate-fade-in">
               {/* 大廳動態 */}
@@ -741,16 +753,34 @@
                   <h2 className="text-xl font-bold mb-5 flex items-center">
                     <i className="fa-solid fa-trophy text-yellow-300 mr-3 text-2xl"></i> 研究室榮譽榜與動態牆
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 relative z-10">
-                    <div className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/20 flex flex-col justify-center">
-                      <span className="text-indigo-100 text-sm font-medium mb-1">進行中專案總數</span>
-                      <span className="text-3xl font-extrabold">{projects.length}</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2 relative z-10">
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">乘客總數</span>
+                      <span className="text-2xl font-extrabold">{totalStudents}</span>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/20 flex flex-col justify-center">
-                      <span className="text-indigo-100 text-sm font-medium mb-1">已投稿期刊/研討會</span>
-                      <span className="text-3xl font-extrabold text-green-300">
-                        {projects.filter(p => p.status.includes('已投稿')).length}
-                      </span>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">專案總數</span>
+                      <span className="text-2xl font-extrabold">{totalProjects}</span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">研討會已投稿</span>
+                      <span className="text-2xl font-extrabold text-green-300">{confSubmitted}</span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">期刊已投稿</span>
+                      <span className="text-2xl font-extrabold text-green-300">{journalSubmitted}</span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">PILOT完成</span>
+                      <span className="text-2xl font-extrabold text-yellow-300">{pilotCompleted}</span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">遊戲發展中</span>
+                      <span className="text-2xl font-extrabold text-yellow-300">{gameDev}</span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/20 flex flex-col justify-center">
+                      <span className="text-indigo-100 text-xs font-medium mb-1">期刊寫作中</span>
+                      <span className="text-2xl font-extrabold text-purple-300">{journalWriting}</span>
                     </div>
                   </div>
                 </div>
@@ -796,14 +826,20 @@
               {/* 專案卡片列表 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {myProjects.map(project => {
-                   // 研討會警告邏輯
-                   let warningMsg = null;
+                   // 🌟 修改：研討會警告邏輯與天數標示
+                   let confInfoNode = null;
                    if (project.targetConference) {
                      const conf = conferences.find(c => c.id == project.targetConference);
                      if (conf) {
                        const days = calculateDaysLeft(conf.confirmDeadline);
-                       if (days >= 0 && days <= 14) {
-                         warningMsg = `🚨 警示：距離老師確認死線 (${conf.confirmDeadline}) 只剩 ${days} 天，超過期限系統將自動除名！`;
+                       if (days !== null) {
+                         if (days < 0) {
+                           confInfoNode = <div className="mt-2 text-xs font-bold text-red-600 bg-red-50 p-1.5 rounded border border-red-200">🚨 已超過老師確認死線！系統將於下次整理時自動除名。</div>;
+                         } else if (days <= 14) {
+                           confInfoNode = <div className="mt-2 text-xs font-bold text-red-600 bg-red-50 p-1.5 rounded border border-red-200 animate-pulse">🚨 警示：距離老師確認死線 ({conf.confirmDeadline}) 只剩 {days} 天！</div>;
+                         } else {
+                           confInfoNode = <div className="mt-2 text-xs font-bold text-teal-700 bg-teal-50 p-1.5 rounded border border-teal-200">ℹ️ 距離老師確認死線 ({conf.confirmDeadline}) 還有 {days} 天。</div>;
+                         }
                        }
                      }
                    }
@@ -838,7 +874,7 @@
                             <option key={c.id} value={c.id}>{c.name} (死線: {c.confirmDeadline})</option>
                           ))}
                         </select>
-                        {warningMsg && <div className="mt-2 text-xs font-bold text-red-600 bg-red-50 p-1.5 rounded border border-red-200 animate-pulse">{warningMsg}</div>}
+                        {confInfoNode}
                       </div>
 
                       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-auto">
@@ -919,7 +955,7 @@
         // --- 主應用程式 ---
         const App = () => {
           const [currentUser, setCurrentUser] = useState(null); 
-          const TEACHER_EMAIL = "teacher@meg.edu.tw"; // 在此設定老師的信箱
+          const TEACHER_EMAIL = "composerho@gmail.com"; // 🌟 更新：設定老師的信箱為 composerho@gmail.com
           
           const [students, setStudents] = useState([]);
           const [projects, setProjects] = useState([]);
