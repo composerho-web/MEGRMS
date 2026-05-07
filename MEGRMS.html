@@ -5,24 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MEG新自強3000列車 - 進度管理系統</title>
     
-    <!-- 引入 Tailwind CSS 進行排版與樣式設計 -->
+    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 引入 FontAwesome 作為圖示庫 -->
+    <!-- 引入 FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- 引入 React 與 ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     
-    <!-- 引入 Babel 讓瀏覽器可以直接解析 JSX 語法 -->
+    <!-- 引入 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 🌟 引入 Google 官方的 Identity Services 登入套件 -->
+    <!-- 引入 Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <style>
-        /* 跑馬燈與漸顯動畫設定 */
         @keyframes marquee {
             0% { transform: translateX(100vw); }
             100% { transform: translateX(-150%); }
@@ -42,13 +41,11 @@
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
-    <!-- React 應用的掛載點 -->
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // 定義系統標準狀態
         const STATUSES = [
           "💭 概念發想未經報告", "✅ 報告後老師確認", "🛠️ 研究與遊戲發展中", 
           "🎯 PILOT完成", "📤 研討會已投稿", "📋 期刊施測準備中", 
@@ -56,7 +53,7 @@
           "📜 學位論文撰寫中", "📌 其他"
         ];
 
-        // 🌟 設定您的 API 網址與全域同步函式
+        // 🌟 您的 API 網址 (維持不變) 
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
 
         const syncToBackend = (action, data) => {
@@ -64,6 +61,14 @@
             method: 'POST',
             body: JSON.stringify({ action, data })
           }).catch(err => console.error("同步失敗:", err));
+        };
+
+        const calculateDaysLeft = (targetDate) => {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const target = new Date(targetDate);
+            target.setHours(0,0,0,0);
+            return Math.floor((target - today) / (1000 * 60000 * 60 * 24));
         };
 
         const StatusBadge = ({ status }) => {
@@ -92,9 +97,7 @@
           const [devEmail, setDevEmail] = useState('');
 
           useEffect(() => {
-            // 初始化 Google 登入按鈕
             const CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"; 
-
             if (window.google) {
               window.google.accounts.id.initialize({
                 client_id: CLIENT_ID,
@@ -122,7 +125,6 @@
                   <h2 className="text-xl font-bold text-gray-800 mb-2">乘客請驗票登入</h2>
                   <p className="text-sm text-gray-500 mb-8">請使用您的 Google 帳號登入。系統將依據您的信箱自動分配專屬權限。</p>
                   
-                  {/* Google 登入按鈕掛載點 */}
                   <div id="google-signin-button" className="mb-6"></div>
 
                   <div className="w-full flex items-center justify-center mt-4 mb-4">
@@ -148,10 +150,6 @@
                     >
                       模擬登入
                     </button>
-                    <div className="mt-2 text-left text-[10px] text-gray-400">
-                      * 老師帳號：teacher@meg.edu.tw<br/>
-                      * 學生帳號請輸入 Google Sheet 中有設定的信箱
-                    </div>
                   </div>
                 </div>
               </div>
@@ -160,44 +158,122 @@
         };
 
         // --- 老師儀表板 ---
-        const TeacherDashboard = ({ projects, setProjects, students, setStudents, openMarqueeManager }) => {
+        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, openMarqueeManager }) => {
           const [sortBy, setSortBy] = useState('latest'); 
           const [filterDegree, setFilterDegree] = useState('all');
           const [filterStatus, setFilterStatus] = useState('all'); 
+          
+          // Modal States
+          const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+          const [isConfModalOpen, setIsConfModalOpen] = useState(false);
+          const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
+
+          // Add Student Form State
+          const [newStudent, setNewStudent] = useState({ name: '', degree: '', contactLink: '', email: '' });
+
+          // Add/Edit Conference State
+          const [newConf, setNewConf] = useState({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
+
+          // Delete Project Reason State
+          const [deletingProjectId, setDeletingProjectId] = useState(null);
+          const [deleteReason, setDeleteReason] = useState("");
 
           const pendingApprovals = projects.filter(p => p.pendingStatus !== null);
           const stagnantProjects = projects.filter(p => p.status.includes("概念發想") && p.pendingStatus === null);
 
+          // 確認審核
           const handleApprove = (projectId) => {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
             const updatedProject = { ...project, status: project.pendingStatus, pendingStatus: null, pendingDescription: null, lastUpdate: new Date().toISOString().split('T')[0] };
-            
             setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
             syncToBackend('updateProject', updatedProject);
           };
 
+          // 退回審核
           const handleReject = (projectId) => {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
             const updatedProject = { ...project, pendingStatus: null, pendingDescription: null };
-            
             setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
             syncToBackend('updateProject', updatedProject);
           };
 
+          // 追加記事
           const handleAppendNote = (studentId, text) => {
             const student = students.find(s => s.id === studentId);
             if (!student) return;
             const dateStr = new Date().toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric'});
             const newNotes = student.notes ? `${student.notes}\n[${dateStr}] ${text}` : `[${dateStr}] ${text}`;
             const updatedStudent = { ...student, notes: newNotes };
-            
             setStudents(students.map(s => s.id === studentId ? updatedStudent : s));
             syncToBackend('updateStudent', updatedStudent);
           };
 
-          // 進階處理：計算每位學生的動態數據
+          // 新增學生
+          const handleAddStudentSubmit = () => {
+            if (!newStudent.name || !newStudent.email) return alert("姓名與信箱為必填！");
+            const st = {
+              id: 's' + Date.now(),
+              name: newStudent.name.trim(),
+              degree: newStudent.degree.trim(),
+              contactLink: newStudent.contactLink.trim(),
+              email: newStudent.email.trim(),
+              notes: ''
+            };
+            setStudents([...students, st]);
+            syncToBackend('addStudent', st);
+            setIsAddStudentOpen(false);
+            setNewStudent({ name: '', degree: '', contactLink: '', email: '' });
+          };
+
+          // 新增研討會
+          const handleAddConfSubmit = () => {
+            if (!newConf.name || !newConf.confirmDeadline) return alert("名稱與確認死線為必填！");
+            const conf = {
+              id: 'c' + Date.now(),
+              name: newConf.name,
+              url: newConf.url,
+              submitDeadline: newConf.submitDeadline,
+              confirmDeadline: newConf.confirmDeadline
+            };
+            const updatedConfs = [...conferences, conf];
+            setConferences(updatedConfs);
+            syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
+            setNewConf({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
+          };
+
+          // 刪除研討會
+          const handleDeleteConf = (confId) => {
+            if(!confirm("確定要刪除這個研討會選項嗎？")) return;
+            const updatedConfs = conferences.filter(c => c.id !== confId);
+            setConferences(updatedConfs);
+            syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
+          };
+
+          // 刪除專案送出
+          const handleDeleteProjectSubmit = () => {
+            if (!deleteReason.trim()) return alert("請輸入刪除說明或原因！");
+            const project = projects.find(p => p.id === deletingProjectId);
+            const student = students.find(s => s.id === project.studentId);
+            
+            const dateStr = new Date().toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric'});
+            const reasonStr = `[${dateStr}] 系統刪除了專案「${project.title}」，原因：${deleteReason}`;
+            const updatedStudent = { ...student, notes: student.notes ? student.notes + '\n' + reasonStr : reasonStr };
+            
+            // 更新畫面
+            setProjects(projects.filter(p => p.id !== deletingProjectId));
+            setStudents(students.map(s => s.id === student.id ? updatedStudent : s));
+            
+            // 寫入後端
+            syncToBackend('deleteProject', { id: deletingProjectId });
+            syncToBackend('updateStudent', updatedStudent);
+            
+            setDeletingProjectId(null);
+            setDeleteReason("");
+          };
+
+          // 計算每位學生的動態數據
           const augmentedStudents = students.map(student => {
             const studentProjects = projects.filter(p => p.studentId === student.id);
             const projectCount = studentProjects.length;
@@ -214,7 +290,7 @@
             return { ...student, projectCount, latestUpdate, displayDate, hasPending, hasStagnant };
           });
 
-          // 執行篩選與排序
+          // 篩選與排序
           let processedStudents = augmentedStudents.filter(s => {
             if (filterDegree !== 'all' && !s.degree.includes(filterDegree)) return false;
             if (filterStatus === 'pending' && !s.hasPending) return false;
@@ -231,28 +307,34 @@
 
           return (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+              {/* 頂部管理控制列 */}
+              <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 gap-4">
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                   <i className="fa-solid fa-chart-line text-indigo-600 mr-3"></i> 列車長指揮中心
                 </h2>
-                <button onClick={openMarqueeManager} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium hover:bg-indigo-100 transition shadow-sm border border-indigo-100">
-                  <i className="fa-solid fa-bullhorn mr-2"></i> 廣播與公告管理
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setIsConfModalOpen(true)} className="px-4 py-2 bg-teal-50 text-teal-700 rounded-lg font-medium hover:bg-teal-100 transition shadow-sm border border-teal-100">
+                    <i className="fa-solid fa-calendar-check mr-2"></i> 研討會管理
+                  </button>
+                  <button onClick={openMarqueeManager} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium hover:bg-indigo-100 transition shadow-sm border border-indigo-100">
+                    <i className="fa-solid fa-bullhorn mr-2"></i> 廣播與公告
+                  </button>
+                </div>
               </div>
 
+              {/* 儀表板區域 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 待審核區 */}
                 <Card className="col-span-1 md:col-span-2 border-l-4 border-l-orange-500">
                   <div className="p-4 border-b bg-orange-50/50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-800 flex items-center">
                       <i className="fa-solid fa-clock text-orange-500 mr-2"></i> 待確認進度申請 ({pendingApprovals.length})
                     </h3>
                   </div>
-                  <div className="p-4 space-y-4">
+                  <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto">
                     {pendingApprovals.length === 0 ? (
-                      <div className="text-gray-500 text-center py-8 flex flex-col items-center">
-                        <i className="fa-solid fa-mug-hot text-3xl mb-2 text-gray-300"></i>
-                        <p>目前沒有待審核的申請，列車平穩行駛中。</p>
+                      <div className="text-gray-500 text-center py-8">
+                        <i className="fa-solid fa-mug-hot text-3xl mb-2 text-gray-300 block"></i>
+                        目前沒有待審核的申請，列車平穩行駛中。
                       </div>
                     ) : (
                       pendingApprovals.map(project => (
@@ -273,7 +355,7 @@
                                 <button
                                   onClick={() => handleAppendNote(project.studentId, project.pendingDescription)}
                                   className="absolute top-2 right-2 text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded shadow-sm hover:bg-blue-600 hover:text-white transition opacity-0 group-hover:opacity-100 flex items-center"
-                                  title="將此說明文字複製並追加到該學生的指導註記中"
+                                  title="移至學生的指導註記中"
                                 >
                                   <i className="fa-solid fa-thumbtack mr-1"></i>移至註記
                                 </button>
@@ -281,12 +363,8 @@
                             )}
                           </div>
                           <div className="flex gap-2 mt-4 sm:mt-0 w-full sm:w-auto self-start sm:self-center">
-                            <button onClick={() => handleApprove(project.id)} className="flex-1 sm:flex-none px-4 py-2 bg-green-500 text-white text-sm font-bold rounded-lg hover:bg-green-600 flex items-center justify-center shadow-sm">
-                              <i className="fa-solid fa-circle-check mr-2"></i> 確認
-                            </button>
-                            <button onClick={() => handleReject(project.id)} className="flex-1 sm:flex-none px-4 py-2 bg-red-50 text-red-600 text-sm font-bold rounded-lg hover:bg-red-100 border border-red-200">
-                              退回
-                            </button>
+                            <button onClick={() => handleApprove(project.id)} className="flex-1 sm:flex-none px-4 py-2 bg-green-500 text-white text-sm font-bold rounded-lg hover:bg-green-600 shadow-sm"><i className="fa-solid fa-circle-check mr-2"></i> 確認</button>
+                            <button onClick={() => handleReject(project.id)} className="flex-1 sm:flex-none px-4 py-2 bg-red-50 text-red-600 text-sm font-bold rounded-lg hover:bg-red-100 border border-red-200">退回</button>
                           </div>
                         </div>
                       ))
@@ -294,14 +372,13 @@
                   </div>
                 </Card>
 
-                {/* 警示區 */}
                 <Card className="border-l-4 border-l-red-500">
                   <div className="p-4 border-b bg-red-50/50">
                     <h3 className="font-bold text-gray-800 flex items-center">
                       <i className="fa-solid fa-triangle-exclamation text-red-500 mr-2"></i> 需關注專案 (卡關過久)
                     </h3>
                   </div>
-                  <div className="p-4">
+                  <div className="p-4 max-h-[400px] overflow-y-auto">
                     <ul className="space-y-3">
                       {stagnantProjects.map(project => (
                         <li key={project.id} className="flex justify-between items-center text-sm border-b pb-3 last:border-0">
@@ -315,7 +392,7 @@
                             </div>
                           </div>
                           <button className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold bg-indigo-50 px-2 py-1 rounded">
-                            發送提醒
+                            提醒
                           </button>
                         </li>
                       ))}
@@ -324,99 +401,84 @@
                 </Card>
               </div>
 
-              {/* 學生管理與筆記區 */}
+              {/* 學生名單與筆記區 */}
               <div className="mt-10">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
                   <h3 className="text-xl font-bold text-gray-800 flex items-center">
                     <i className="fa-solid fa-users text-indigo-600 mr-2"></i> 乘客名單與指導紀錄
+                    <button onClick={() => setIsAddStudentOpen(true)} className="ml-4 text-sm px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition flex items-center">
+                      <i className="fa-solid fa-user-plus mr-1.5"></i> 新增乘客
+                    </button>
                   </h3>
                   
-                  {/* 篩選與排序控制列 */}
-                  <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200 w-full md:w-auto">
-                    <div className="flex items-center">
-                      <i className="fa-solid fa-filter text-gray-400 mx-2"></i>
-                    </div>
-                    <select 
-                      className="text-sm p-1.5 bg-gray-50 border border-gray-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-medium text-gray-700"
-                      value={filterDegree} onChange={(e) => setFilterDegree(e.target.value)}
-                    >
+                  <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
+                    <i className="fa-solid fa-filter text-gray-400 mx-2"></i>
+                    <select className="text-sm p-1.5 bg-gray-50 border rounded-md" value={filterDegree} onChange={(e) => setFilterDegree(e.target.value)}>
                       <option value="all">學制：不限</option>
                       <option value="博">博士班</option>
                       <option value="碩">碩士班</option>
                     </select>
-                    <select 
-                      className="text-sm p-1.5 bg-gray-50 border border-gray-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-medium text-gray-700"
-                      value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-                    >
+                    <select className="text-sm p-1.5 bg-gray-50 border rounded-md" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                       <option value="all">狀態：全部</option>
-                      <option value="pending">🟡 有待審核項目</option>
-                      <option value="stagnant">🔴 有進度停滯項目</option>
+                      <option value="pending">🟡 有待審核</option>
+                      <option value="stagnant">🔴 有進度停滯</option>
                     </select>
-                    <select 
-                      className="text-sm p-1.5 bg-gray-50 border border-gray-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500 font-medium text-gray-700"
-                      value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-                    >
-                      <option value="latest">排序：最新更新優先</option>
-                      <option value="oldest">排序：最久未更新優先</option>
-                      <option value="projects_desc">排序：專案數量最多</option>
+                    <select className="text-sm p-1.5 bg-gray-50 border rounded-md" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                      <option value="latest">排序：最新更新</option>
+                      <option value="oldest">排序：最久未更新</option>
+                      <option value="projects_desc">排序：專案最多</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {processedStudents.map(student => (
-                    <Card key={student.id} className="hover:shadow-md transition bg-white border-t-4 border-t-indigo-400 relative">
-                      {/* 狀態標籤 */}
+                    <Card key={student.id} className="hover:shadow-md transition bg-white border-t-4 border-t-indigo-400 relative flex flex-col h-full">
                       <div className="absolute top-2 right-2 flex gap-1">
-                        {student.hasPending && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-bold shadow-sm" title="有待審核項目">待審</span>}
-                        {student.hasStagnant && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-bold shadow-sm" title="有卡關專案">卡關</span>}
+                        {student.hasPending && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-bold shadow-sm">待審</span>}
+                        {student.hasStagnant && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-bold shadow-sm">卡關</span>}
                       </div>
 
-                      <div className="p-4">
+                      <div className="p-4 flex-grow flex flex-col">
                         <div className="flex justify-between items-center mb-3 mt-1">
                           <span className="font-bold text-lg text-gray-800">
                             {student.name} <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full ml-1">{student.degree}</span>
                           </span>
                           <div className="flex gap-2">
                             {student.contactLink && student.contactLink !== '#' && student.contactLink.trim() !== '' ? (
-                              <a href={student.contactLink} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition" title="傳送私訊">
-                                <i className="fa-solid fa-comment-dots"></i>
-                              </a>
+                              <a href={student.contactLink} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition" title="傳送私訊"><i className="fa-solid fa-comment-dots"></i></a>
                             ) : (
-                              <button className="p-1.5 bg-gray-50 text-gray-300 rounded-md cursor-not-allowed" title="尚未設定連結"><i className="fa-solid fa-comment-dots"></i></button>
-                            )}
-                            {student.driveLink && student.driveLink !== '#' && student.driveLink.trim() !== '' ? (
-                              <a href={student.driveLink} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition" title="開啟共用雲端">
-                                <i className="fa-solid fa-folder-open"></i>
-                              </a>
-                            ) : (
-                              <button className="p-1.5 bg-gray-50 text-gray-300 rounded-md cursor-not-allowed" title="尚未設定連結"><i className="fa-solid fa-folder-open"></i></button>
+                              <button className="p-1.5 bg-gray-50 text-gray-300 rounded-md cursor-not-allowed" title="尚未設定聯絡連結"><i className="fa-solid fa-comment-dots"></i></button>
                             )}
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-2 mb-3">
+                          <button 
+                            onClick={() => setManageStudentProjectsId(student.id)}
+                            className="text-[11px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition p-1.5 rounded border border-indigo-100 flex flex-col items-center justify-center cursor-pointer"
+                            title="點擊管理此學生的專案"
+                          >
+                            <span className="font-bold mb-0.5 flex items-center"><i className="fa-solid fa-bars-progress mr-1"></i>管理專案</span>
+                            <span className="font-black text-sm">{student.projectCount} 個</span>
+                          </button>
                           <div className="text-[11px] text-gray-500 bg-gray-50 p-1.5 rounded border border-gray-100 flex flex-col items-center justify-center">
-                            <span className="font-semibold mb-0.5">專案數</span>
-                            <span className="font-black text-gray-800 text-sm">{student.projectCount}</span>
-                          </div>
-                          <div className="text-[11px] text-gray-500 bg-gray-50 p-1.5 rounded border border-gray-100 flex flex-col items-center justify-center">
-                            <span className="font-semibold mb-0.5">最後更新日</span>
-                            <span className={`font-bold ${student.displayDate === '無更新' ? 'text-gray-400' : 'text-indigo-600'}`}>
+                            <span className="font-semibold mb-0.5">最後更新</span>
+                            <span className={`font-bold ${student.displayDate === '無更新' ? 'text-gray-400' : 'text-gray-700'}`}>
                               {student.displayDate}
                             </span>
                           </div>
                         </div>
 
-                        <div className="mt-3">
-                          <label className="text-xs font-semibold text-gray-600 mb-1 block">指導註記 (僅老師可見)</label>
+                        <div className="mt-auto pt-2">
+                          <label className="text-[11px] font-semibold text-gray-500 mb-1 block">指導註記 / 刪除紀錄</label>
                           <textarea 
                             className="w-full text-sm p-2 border border-yellow-200 rounded-lg bg-yellow-50/50 focus:outline-none focus:ring-2 focus:ring-yellow-400 resize-none"
                             rows="2"
                             value={student.notes || ""}
                             onChange={(e) => setStudents(students.map(s => s.id === student.id ? { ...s, notes: e.target.value } : s))}
                             onBlur={() => syncToBackend('updateStudent', students.find(s => s.id === student.id))}
-                            placeholder="紀錄 meeting 重點..."
+                            placeholder="紀錄重點或原因..."
                           ></textarea>
                         </div>
                       </div>
@@ -425,18 +487,151 @@
                   
                   {processedStudents.length === 0 && (
                     <div className="col-span-full text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500">
-                      <i className="fa-solid fa-folder-open text-3xl mb-2 text-gray-300"></i>
-                      <p>沒有符合目前篩選條件的學生。</p>
+                      <p>沒有符合條件的學生。</p>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Modal: 新增學生帳號 */}
+              {isAddStudentOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                    <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold"><i className="fa-solid fa-user-plus mr-2"></i>新增乘客帳號</h3>
+                      <button onClick={() => setIsAddStudentOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 space-y-4 text-sm">
+                      <div>
+                        <label className="block font-bold text-gray-700 mb-1">學生姓名 *</label>
+                        <input type="text" className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} placeholder="例如：王小明"/>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-gray-700 mb-1">年級 (身分)</label>
+                        <input type="text" className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500" value={newStudent.degree} onChange={e => setNewStudent({...newStudent, degree: e.target.value})} placeholder="例如：博一、碩二..."/>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-gray-700 mb-1">Google 登入 Email * (用於權限驗證)</label>
+                        <input type="email" className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500" value={newStudent.email} onChange={e => setNewStudent({...newStudent, email: e.target.value})} placeholder="學生真實的 Google 信箱"/>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-gray-700 mb-1">私訊聯絡連結 (選填)</label>
+                        <input type="url" className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500" value={newStudent.contactLink} onChange={e => setNewStudent({...newStudent, contactLink: e.target.value})} placeholder="例如 LINE 或 Messenger 網址"/>
+                      </div>
+                      <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                        <button onClick={() => setIsAddStudentOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-600 font-bold rounded hover:bg-gray-200">取消</button>
+                        <button onClick={handleAddStudentSubmit} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">建立帳號</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal: 研討會管理 */}
+              {isConfModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-teal-600 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold"><i className="fa-solid fa-calendar-check mr-2"></i>研討會目標清單管理</h3>
+                      <button onClick={() => setIsConfModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-grow bg-gray-50">
+                      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                        <h4 className="font-bold text-teal-800 mb-3 border-b pb-2"><i className="fa-solid fa-plus mr-1"></i> 新增研討會選項</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          <div><label className="block text-gray-600 mb-1">研討會名稱 *</label><input type="text" className="w-full p-2 border rounded" value={newConf.name} onChange={e=>setNewConf({...newConf, name: e.target.value})} placeholder="例如: ICCE 2026"/></div>
+                          <div><label className="block text-gray-600 mb-1">大會官方網址</label><input type="url" className="w-full p-2 border rounded" value={newConf.url} onChange={e=>setNewConf({...newConf, url: e.target.value})} placeholder="http://..."/></div>
+                          <div><label className="block text-gray-600 mb-1">大會投稿截稿日</label><input type="date" className="w-full p-2 border rounded" value={newConf.submitDeadline} onChange={e=>setNewConf({...newConf, submitDeadline: e.target.value})}/></div>
+                          <div><label className="block font-bold text-red-600 mb-1">給老師確認最終期限 *</label><input type="date" className="w-full p-2 border border-red-300 rounded focus:ring-red-500" value={newConf.confirmDeadline} onChange={e=>setNewConf({...newConf, confirmDeadline: e.target.value})}/></div>
+                        </div>
+                        <div className="mt-3 text-right">
+                          <button onClick={handleAddConfSubmit} className="px-4 py-2 bg-teal-600 text-white font-bold text-sm rounded hover:bg-teal-700">加入清單</button>
+                        </div>
+                      </div>
+
+                      <h4 className="font-bold text-gray-700 mb-3">目前開放選擇的研討會：</h4>
+                      <div className="space-y-3">
+                        {conferences.length === 0 ? <div className="text-gray-400 text-center py-4 text-sm">尚未建立研討會。</div> :
+                          conferences.map(conf => (
+                            <div key={conf.id} className="bg-white p-3 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                              <div>
+                                <div className="font-bold text-gray-800">{conf.name} <a href={conf.url} target="_blank" rel="noreferrer" className="text-teal-600 ml-2"><i className="fa-solid fa-link"></i></a></div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  <span className="mr-3">大會死線: {conf.submitDeadline || '未定'}</span>
+                                  <span className="text-red-600 font-bold bg-red-50 px-1 rounded">老師確認期限: {conf.confirmDeadline}</span>
+                                </div>
+                              </div>
+                              <button onClick={() => handleDeleteConf(conf.id)} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded"><i className="fa-solid fa-trash"></i></button>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal: 專案管理與刪除 */}
+              {manageStudentProjectsId && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-indigo-800 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold">
+                        <i className="fa-solid fa-bars-progress mr-2"></i>
+                        {students.find(s=>s.id === manageStudentProjectsId)?.name} 的專案管理
+                      </h3>
+                      <button onClick={() => { setManageStudentProjectsId(null); setDeletingProjectId(null); }}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto bg-gray-50">
+                      {projects.filter(p => p.studentId === manageStudentProjectsId).length === 0 ? (
+                        <p className="text-center text-gray-500 my-8">該學生目前沒有任何專案。</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {projects.filter(p => p.studentId === manageStudentProjectsId).map(project => (
+                            <div key={project.id} className={`bg-white border rounded-xl p-4 shadow-sm ${deletingProjectId === project.id ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-200'}`}>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-bold text-lg text-gray-800">{project.title}</h4>
+                                  <div className="mt-2"><StatusBadge status={project.status} /></div>
+                                </div>
+                                {deletingProjectId !== project.id && (
+                                  <button onClick={() => setDeletingProjectId(project.id)} className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-sm font-bold border border-red-200 transition">
+                                    <i className="fa-solid fa-trash-can mr-1"></i> 刪除此專案
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {/* 刪除確認區塊 */}
+                              {deletingProjectId === project.id && (
+                                <div className="mt-4 bg-red-50 border border-red-200 p-4 rounded-lg animate-fade-in">
+                                  <label className="block text-sm font-bold text-red-800 mb-2">請輸入退回或刪除的原因 (此原因將同步至學生的指導註記中)：</label>
+                                  <textarea 
+                                    className="w-full p-2 border border-red-300 rounded focus:ring-2 focus:ring-red-400 bg-white text-sm"
+                                    rows="2"
+                                    placeholder="例如：題目不符合目標、內容重疊需合併..."
+                                    value={deleteReason}
+                                    onChange={(e) => setDeleteReason(e.target.value)}
+                                  ></textarea>
+                                  <div className="flex justify-end gap-2 mt-3">
+                                    <button onClick={() => setDeletingProjectId(null)} className="px-4 py-1.5 bg-white text-gray-600 font-bold text-sm border rounded hover:bg-gray-50">取消</button>
+                                    <button onClick={handleDeleteProjectSubmit} className="px-4 py-1.5 bg-red-600 text-white font-bold text-sm rounded shadow hover:bg-red-700">確定刪除並寫入備註</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         };
 
         // --- 學生工作區 ---
-        const StudentWorkspace = ({ student, projects, setProjects }) => {
+        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences }) => {
           if (!student) {
             return (
               <div className="text-center py-20 animate-pulse">
@@ -450,19 +645,40 @@
 
           const [draftStatuses, setDraftStatuses] = useState({});
           const [draftDescriptions, setDraftDescriptions] = useState({});
-          
-          // 控制建立新專案的 Modal 與標題
           const [isAddingProject, setIsAddingProject] = useState(false);
           const [newTitle, setNewTitle] = useState("");
 
-          const handleSelectChange = (projectId, value) => {
-            setDraftStatuses(prev => ({ ...prev, [projectId]: value }));
-          };
+          // 學生修改年級 State
+          const [isEditingDegree, setIsEditingDegree] = useState(false);
+          const [tempDegree, setTempDegree] = useState(student.degree || "");
 
-          const handleDescriptionChange = (projectId, value) => {
-            if (value.length <= 300) {
-              setDraftDescriptions(prev => ({ ...prev, [projectId]: value }));
+          // 防呆：登入後自動檢查研討會過期並移除 (只執行一次)
+          const [hasCheckedExpiry, setHasCheckedExpiry] = useState(false);
+          useEffect(() => {
+            if (!hasCheckedExpiry && myProjects.length > 0 && conferences.length > 0) {
+              let changed = false;
+              const updated = projects.map(p => {
+                if (p.studentId === student.id && p.targetConference) {
+                  const conf = conferences.find(c => c.id == p.targetConference);
+                  // 若找不到該研討會(可能被老師刪了)，或已超過確認期限
+                  if (!conf || calculateDaysLeft(conf.confirmDeadline) < 0) {
+                    changed = true;
+                    const up = { ...p, targetConference: null };
+                    syncToBackend('updateProject', up);
+                    return up;
+                  }
+                }
+                return p;
+              });
+              if (changed) setProjects(updated);
+              setHasCheckedExpiry(true);
             }
+          }, [myProjects.length, conferences.length, hasCheckedExpiry]);
+
+          // 更新狀態
+          const handleSelectChange = (projectId, value) => setDraftStatuses(prev => ({ ...prev, [projectId]: value }));
+          const handleDescriptionChange = (projectId, value) => {
+            if (value.length <= 300) setDraftDescriptions(prev => ({ ...prev, [projectId]: value }));
           };
 
           const handleSubmitRequest = (projectId, currentStatus) => {
@@ -476,44 +692,49 @@
               setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
               syncToBackend('updateProject', updatedProject);
 
-              setDraftStatuses(prev => {
-                const newState = { ...prev };
-                delete newState[projectId];
-                return newState;
-              });
-              setDraftDescriptions(prev => {
-                const newState = { ...prev };
-                delete newState[projectId];
-                return newState;
-              });
+              setDraftStatuses(prev => { const n = {...prev}; delete n[projectId]; return n; });
+              setDraftDescriptions(prev => { const n = {...prev}; delete n[projectId]; return n; });
             }
           };
 
-          // 處理建立新專案送出
+          // 選擇研討會
+          const handleAssignConference = (projectId, confId) => {
+             const project = projects.find(p => p.id === projectId);
+             const updated = { ...project, targetConference: confId || null };
+             setProjects(projects.map(p => p.id === projectId ? updated : p));
+             syncToBackend('updateProject', updated);
+          };
+
+          // 修改年級儲存
+          const saveDegree = () => {
+             const updated = { ...student, degree: tempDegree };
+             setStudents(students.map(s => s.id === student.id ? updated : s));
+             syncToBackend('updateStudent', updated);
+             setIsEditingDegree(false);
+          };
+
           const handleAddProject = () => {
             if(!newTitle.trim()) return;
             const newProj = {
-              id: Date.now().toString(), // 以時間戳作為唯一 ID
+              id: Date.now().toString(),
               studentId: student.id,
               studentName: student.name,
               title: newTitle.trim(),
               status: '💭 概念發想未經報告',
               pendingStatus: null,
               pendingDescription: null,
+              targetConference: null,
               lastUpdate: new Date().toISOString().split('T')[0]
             };
-            
-            // 更新畫面並同步至資料庫
             setProjects([...projects, newProj]);
             syncToBackend('addProject', newProj);
-            
             setIsAddingProject(false);
             setNewTitle('');
           };
 
           return (
             <div className="space-y-8 animate-fade-in">
-              {/* 研究室動態牆 (大廳) */}
+              {/* 大廳動態 */}
               <Card className="bg-gradient-to-br from-indigo-600 to-blue-800 border-none shadow-lg text-white">
                 <div className="p-6 relative overflow-hidden">
                   <i className="fa-solid fa-train absolute -right-4 -bottom-4 text-9xl text-white opacity-10"></i>
@@ -531,22 +752,33 @@
                         {projects.filter(p => p.status.includes('已投稿')).length}
                       </span>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/20 flex flex-col justify-center">
-                      <span className="text-indigo-100 text-sm font-medium mb-1">距離近期截稿日</span>
-                      <span className="text-3xl font-extrabold text-orange-300">倒數中</span>
-                    </div>
-                  </div>
-                  <div className="bg-white/20 backdrop-blur-md p-3 rounded-lg text-sm text-white flex items-center border border-white/30">
-                    <i className="fa-solid fa-arrow-trend-up text-green-300 mr-3 text-lg"></i>
-                    <p className="font-medium">🎉 狂賀！又有一篇論文準備排入研討會的投稿囉！大家繼續加油！</p>
                   </div>
                 </div>
               </Card>
 
+              {/* 學生資訊與聯絡列 */}
               <div className="flex flex-col md:flex-row justify-between items-end md:items-center border-b border-gray-200 pb-4">
                 <div>
-                  <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Hi, {student.name} 的專屬車廂</h2>
-                  <p className="text-gray-500 text-sm mt-2 font-medium">請確實更新進度，並將最新檔案上傳至共用資料夾。</p>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Hi, {student.name} 的專屬車廂</h2>
+                    {/* 年級修改 UI */}
+                    {isEditingDegree ? (
+                      <div className="flex items-center bg-white border border-indigo-200 rounded-full pl-2 overflow-hidden shadow-sm">
+                        <input type="text" className="text-xs w-16 outline-none text-indigo-800 font-bold" value={tempDegree} onChange={e=>setTempDegree(e.target.value)} autoFocus />
+                        <button onClick={saveDegree} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-2 py-1 text-xs font-bold transition"><i className="fa-solid fa-check"></i></button>
+                        <button onClick={()=>setIsEditingDegree(false)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 text-xs transition"><i className="fa-solid fa-xmark"></i></button>
+                      </div>
+                    ) : (
+                      <span 
+                        onClick={() => { setTempDegree(student.degree); setIsEditingDegree(true); }}
+                        className="text-sm bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full cursor-pointer hover:bg-indigo-200 transition font-bold flex items-center border border-indigo-200 shadow-sm"
+                        title="點擊修改年級身分"
+                      >
+                        {student.degree} <i className="fa-solid fa-pen ml-1.5 text-[10px] opacity-60"></i>
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 text-sm mt-2 font-medium">請確實更新進度，並留意研討會最後確認期限。</p>
                 </div>
                 <div className="flex gap-3 mt-4 md:mt-0">
                   {student.contactLink && student.contactLink !== '#' && student.contactLink.trim() !== '' ? (
@@ -554,70 +786,85 @@
                       <i className="fa-solid fa-paper-plane mr-2"></i> 聯繫指導教授
                     </a>
                   ) : (
-                    <button className="px-4 py-2 bg-gray-300 text-white rounded-lg font-bold cursor-not-allowed flex items-center" title="尚未設定連結">
+                    <button className="px-4 py-2 bg-gray-300 text-white rounded-lg font-bold cursor-not-allowed flex items-center" title="老師尚未設定聯絡連結">
                       <i className="fa-solid fa-paper-plane mr-2"></i> 聯繫指導教授
-                    </button>
-                  )}
-                  {student.driveLink && student.driveLink !== '#' && student.driveLink.trim() !== '' ? (
-                    <a href={student.driveLink} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow hover:bg-gray-900 transition flex items-center">
-                      <i className="fa-solid fa-cloud-arrow-up mr-2"></i> 上傳檔案至雲端
-                    </a>
-                  ) : (
-                    <button className="px-4 py-2 bg-gray-300 text-white rounded-lg font-bold cursor-not-allowed flex items-center" title="尚未設定連結">
-                      <i className="fa-solid fa-cloud-arrow-up mr-2"></i> 上傳檔案至雲端
                     </button>
                   )}
                 </div>
               </div>
 
+              {/* 專案卡片列表 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {myProjects.map(project => (
-                  <Card key={project.id} className="relative overflow-visible border-t-4 border-t-indigo-500 hover:shadow-lg transition duration-300">
+                {myProjects.map(project => {
+                   // 研討會警告邏輯
+                   let warningMsg = null;
+                   if (project.targetConference) {
+                     const conf = conferences.find(c => c.id == project.targetConference);
+                     if (conf) {
+                       const days = calculateDaysLeft(conf.confirmDeadline);
+                       if (days >= 0 && days <= 14) {
+                         warningMsg = `🚨 警示：距離老師確認死線 (${conf.confirmDeadline}) 只剩 ${days} 天，超過期限系統將自動除名！`;
+                       }
+                     }
+                   }
+
+                   return (
+                  <Card key={project.id} className="relative overflow-visible border-t-4 border-t-indigo-500 hover:shadow-lg transition duration-300 flex flex-col">
                     {project.pendingStatus && (
-                      <div className="absolute -top-4 -right-4 bg-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center animate-pulse border-2 border-white">
+                      <div className="absolute -top-4 -right-4 bg-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center animate-pulse border-2 border-white z-10">
                         <i className="fa-solid fa-hourglass-half mr-2"></i> 老師審核中
                       </div>
                     )}
-                    <div className="p-6">
-                      <h3 className="font-extrabold text-xl text-gray-900 mb-4">{project.title}</h3>
+                    <div className="p-6 flex-grow flex flex-col">
+                      <h3 className="font-extrabold text-xl text-gray-900 mb-3">{project.title}</h3>
                       
-                      <div className="mb-6">
-                        <p className="text-xs text-gray-500 mb-2 font-semibold uppercase tracking-wider">目前系統紀錄狀態：</p>
+                      <div className="mb-4">
+                        <p className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wider">目前狀態：</p>
                         <StatusBadge status={project.status} />
                       </div>
 
-                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                        <label className="text-sm font-bold text-gray-700 block mb-2">更新專案進度 (選擇後請確認送出)：</label>
+                      {/* 研討會選擇區塊 */}
+                      <div className="mb-5 bg-teal-50/50 p-3 rounded-lg border border-teal-100">
+                        <label className="text-[11px] font-bold text-teal-800 block mb-1">
+                          <i className="fa-solid fa-calendar-check mr-1"></i> 預計投稿研討會目標
+                        </label>
+                        <select 
+                          className="w-full text-sm p-1.5 border border-teal-200 rounded focus:ring-teal-500 bg-white font-medium text-gray-700"
+                          value={project.targetConference || ""}
+                          onChange={(e) => handleAssignConference(project.id, e.target.value)}
+                        >
+                          <option value="">-- 尚未決定 / 不投研討會 --</option>
+                          {conferences.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} (死線: {c.confirmDeadline})</option>
+                          ))}
+                        </select>
+                        {warningMsg && <div className="mt-2 text-xs font-bold text-red-600 bg-red-50 p-1.5 rounded border border-red-200 animate-pulse">{warningMsg}</div>}
+                      </div>
+
+                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-auto">
+                        <label className="text-sm font-bold text-gray-700 block mb-2">更新專案狀態：</label>
                         <div className="flex flex-col gap-3">
                           <select 
-                            className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white font-medium disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed shadow-sm"
+                            className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white font-medium disabled:bg-gray-200 disabled:text-gray-500 shadow-sm"
                             value={project.pendingStatus || draftStatuses[project.id] || project.status}
                             onChange={(e) => handleSelectChange(project.id, e.target.value)}
                             disabled={project.pendingStatus !== null}
                           >
-                            {STATUSES.map(s => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
+                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                           
                           {draftStatuses[project.id] && draftStatuses[project.id] !== project.status && !project.pendingStatus && (
                             <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm animate-fade-in">
-                              <label className="text-xs font-bold text-gray-700 block mb-1">
-                                進度簡述 / 給老師的話 <span className="text-gray-400 font-normal">(選填，最多300字)</span>：
-                              </label>
+                              <label className="text-xs font-bold text-gray-700 block mb-1">給老師的話 <span className="text-gray-400 font-normal">(選填，最多300字)</span>：</label>
                               <textarea
-                                className="w-full text-sm p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50 mb-2 resize-none"
+                                className="w-full text-sm p-2 border border-gray-300 rounded focus:ring-indigo-500 bg-gray-50 mb-2 resize-none"
                                 rows="2"
-                                placeholder="例：已完成施測收案，最新版論文已上傳至共用資料夾。"
                                 value={draftDescriptions[project.id] || ''}
                                 onChange={(e) => handleDescriptionChange(project.id, e.target.value)}
                               ></textarea>
                               <div className="flex justify-end">
-                                <button 
-                                  onClick={() => handleSubmitRequest(project.id, project.status)}
-                                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-md transition flex items-center justify-center"
-                                >
-                                  <i className="fa-solid fa-paper-plane mr-2"></i> 確認送出
+                                <button onClick={() => handleSubmitRequest(project.id, project.status)} className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-bold rounded shadow-md hover:bg-indigo-700 flex items-center">
+                                  <i className="fa-solid fa-paper-plane mr-1.5"></i> 送出審核
                                 </button>
                               </div>
                             </div>
@@ -628,64 +875,38 @@
                           <div className="mt-3 flex flex-col gap-2">
                             <div className="flex items-start text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-100">
                               <i className="fa-solid fa-circle-info mt-0.5 mr-1.5"></i>
-                              <p>您的進度更新已送出，目前等待老師確認。在老師核准前無法再次更改。</p>
+                              <p>等待老師確認中。在核准前無法再次更改。</p>
                             </div>
-                            {project.pendingDescription && (
-                              <div className="text-xs text-gray-600 bg-white p-3 rounded-lg border border-gray-200">
-                                <span className="font-bold text-gray-800">您附上的說明：</span>
-                                <p className="mt-1 whitespace-pre-wrap">{project.pendingDescription}</p>
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
                     </div>
                   </Card>
-                ))}
+                )})}
 
-                <Card 
-                  onClick={() => setIsAddingProject(true)}
-                  className="border-dashed border-2 border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-10 text-gray-500 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 transition cursor-pointer group"
-                >
+                <Card onClick={() => setIsAddingProject(true)} className="border-dashed border-2 border-gray-300 bg-gray-50/50 flex flex-col items-center justify-center p-10 text-gray-500 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 transition cursor-pointer group min-h-[300px]">
                   <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition">
                     <i className="fa-solid fa-plus text-2xl"></i>
                   </div>
                   <span className="font-bold text-lg">發想新專案</span>
-                  <p className="text-xs mt-2 text-center px-4">有新的 idea 了嗎？點擊建立並提交給老師討論</p>
+                  <p className="text-xs mt-2 text-center px-4">建立新的專案並提交給老師</p>
                 </Card>
               </div>
 
-              {/* 新增專案的輸入 Modal */}
+              {/* Modal: 建立新專案 */}
               {isAddingProject && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
                     <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
-                      <h3 className="font-bold flex items-center"><i className="fa-solid fa-plus mr-2"></i> 發想新專案</h3>
-                      <button onClick={() => setIsAddingProject(false)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-xl"></i></button>
+                      <h3 className="font-bold"><i className="fa-solid fa-plus mr-2"></i> 發想新專案</h3>
+                      <button onClick={() => setIsAddingProject(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
                     </div>
                     <div className="p-6">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">專案名稱 (主題或暫定標題)：</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-4 bg-gray-50"
-                        placeholder="例如：消防逃生VR、反詐騙桌遊..."
-                        value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
-                        autoFocus
-                      />
-                      <div className="text-xs text-gray-500 mb-6 flex items-start">
-                        <i className="fa-solid fa-circle-info mt-0.5 mr-1.5 text-indigo-400"></i>
-                        新建立的專案狀態將自動設定為「💭 概念發想未經報告」，且會立即發送至老師的儀表板等待檢閱。
-                      </div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">專案名稱：</label>
+                      <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-6 bg-gray-50" placeholder="例如：消防逃生VR..." value={newTitle} onChange={(e) => setNewTitle(e.target.value)} autoFocus />
                       <div className="flex justify-end gap-3">
-                        <button onClick={() => setIsAddingProject(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg transition">取消</button>
-                        <button 
-                          onClick={handleAddProject} 
-                          disabled={!newTitle.trim()} 
-                          className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
-                        >
-                          確認建立
-                        </button>
+                        <button onClick={() => setIsAddingProject(false)} className="px-4 py-2 text-gray-600 font-bold bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+                        <button onClick={handleAddProject} disabled={!newTitle.trim()} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50">確認建立</button>
                       </div>
                     </div>
                   </div>
@@ -702,6 +923,7 @@
           
           const [students, setStudents] = useState([]);
           const [projects, setProjects] = useState([]);
+          const [conferences, setConferences] = useState([]); // 研討會選項清單
           const [marqueeText, setMarqueeText] = useState("連線中...");
           const [isLoading, setIsLoading] = useState(true);
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
@@ -711,17 +933,26 @@
             fetch(GAS_API_URL)
               .then(res => res.json())
               .then(data => {
-                if(data.students && data.students.length > 0) setStudents(data.students);
-                if(data.projects && data.projects.length > 0) setProjects(data.projects);
+                if(data.students) setStudents(data.students);
+                // 過濾掉老師刪除(隱藏)的專案 (雖然資料庫裡已經刪除，以防舊資料殘留)
+                if(data.projects) setProjects(data.projects);
+                
                 if(data.config && data.config.length > 0) {
                   const marqueeConf = data.config.find(c => c.key === 'marqueeText');
                   if (marqueeConf) setMarqueeText(marqueeConf.value);
+                  
+                  // 讀取研討會清單 (JSON格式)
+                  const confConfig = data.config.find(c => c.key === 'conferencesList');
+                  if (confConfig && confConfig.value) {
+                     try { setConferences(JSON.parse(confConfig.value)); } 
+                     catch(e) { console.error("解析研討會清單失敗", e); }
+                  }
                 }
                 setIsLoading(false);
               })
               .catch(err => {
-                console.error("抓取資料失敗:", err);
-                setMarqueeText("無法連線到資料庫，請檢查網路或 API 網址。");
+                console.error("連線失敗:", err);
+                setMarqueeText("無法連線到資料庫。");
                 setIsLoading(false);
               });
           }, []);
@@ -752,122 +983,54 @@
           const handleLogout = () => setCurrentUser(null);
 
           if (!currentUser) return <LoginScreen onLoginSuccess={handleLogin} students={students} />;
-
-          if (currentUser.role === 'unauthorized') {
-             return (
-              <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-                <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full border-t-4 border-red-500">
-                  <i className="fa-solid fa-ban text-red-500 text-5xl mb-4"></i>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">未授權的乘客</h2>
-                  <p className="text-gray-600 mb-6 text-sm">此 Google 帳號 ({currentUser.email}) 不在 MEG 研究室的乘客名單中。如果您是研究室成員，請聯繫老師將您的 Email 加入系統。</p>
-                  <button onClick={handleLogout} className="px-6 py-2 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-900 transition">返回登入頁面</button>
-                </div>
-              </div>
-             );
-          }
+          if (currentUser.role === 'unauthorized') return (
+             <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4"><div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm border-t-4 border-red-500"><i className="fa-solid fa-ban text-red-500 text-5xl mb-4"></i><h2 className="text-2xl font-bold mb-2">未授權的乘客</h2><button onClick={handleLogout} className="px-6 py-2 bg-gray-800 text-white font-bold rounded-lg mt-4">返回</button></div></div>
+          );
 
           return (
             <div className="min-h-screen bg-gray-100 flex flex-col">
-              {/* 全域跑馬燈 */}
               <div className="bg-gray-900 text-white px-4 py-2.5 flex items-center overflow-hidden border-b-4 border-red-600">
-                <span className="bg-red-600 text-xs font-black px-2.5 py-1 rounded shadow text-white mr-4 shrink-0 tracking-widest flex items-center">
-                  <i className="fa-solid fa-broadcast-tower mr-1.5 animate-pulse"></i> LIVE
-                </span>
-                <div className="w-full relative whitespace-nowrap overflow-hidden flex items-center text-sm font-medium text-gray-200">
-                   <div className="animate-marquee">
-                     {marqueeText}
-                   </div>
-                </div>
+                <span className="bg-red-600 text-xs font-black px-2.5 py-1 rounded shadow text-white mr-4 shrink-0 flex items-center"><i className="fa-solid fa-broadcast-tower mr-1.5 animate-pulse"></i> LIVE</span>
+                <div className="w-full relative whitespace-nowrap overflow-hidden flex items-center text-sm font-medium"><div className="animate-marquee">{marqueeText}</div></div>
               </div>
 
-              {/* 頂部導覽列 */}
               <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
                   <div className="flex items-center">
-                    <div className="bg-indigo-600 text-white p-2 rounded-lg mr-3 shadow-sm">
-                      <i className="fa-solid fa-train-subway text-xl"></i>
-                    </div>
-                    <div>
-                      <h1 className="text-xl font-black text-gray-900 tracking-tight">MEG-RMS</h1>
-                      <p className="text-xs text-indigo-600 font-bold tracking-wide uppercase">新自強3000 研究進度管理</p>
-                    </div>
+                    <div className="bg-indigo-600 text-white p-2 rounded-lg mr-3 shadow-sm"><i className="fa-solid fa-train-subway text-xl"></i></div>
+                    <div><h1 className="text-xl font-black text-gray-900 tracking-tight">MEG-RMS</h1><p className="text-[10px] text-indigo-600 font-bold uppercase">新自強3000 研究進度管理</p></div>
                   </div>
-                  
-                  {/* 個人帳戶控制台 */}
                   <div className="flex items-center gap-3">
                     <div className="text-right hidden sm:block">
                       <div className="text-sm font-bold text-gray-800">{currentUser.name || (currentUser.role === 'teacher' ? '列車長 (老師)' : currentUser.studentData.name)}</div>
                       <div className="text-[10px] text-gray-500">{currentUser.email}</div>
                     </div>
-                    <button 
-                      onClick={handleLogout}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:text-red-600 transition border border-gray-200 flex items-center"
-                    >
-                      <i className="fa-solid fa-right-from-bracket mr-1.5"></i> 登出
-                    </button>
+                    <button onClick={handleLogout} className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:text-red-600 transition border"><i className="fa-solid fa-right-from-bracket mr-1"></i> 登出</button>
                   </div>
                 </div>
               </header>
 
-              {/* 主要內容區塊 */}
               <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
                 {currentUser.role === 'teacher' ? (
                   <TeacherDashboard 
-                    projects={projects} 
-                    setProjects={setProjects} 
-                    students={students}
-                    setStudents={setStudents}
-                    openMarqueeManager={() => {
-                      setTempMarquee(marqueeText);
-                      setIsMarqueeModalOpen(true);
-                    }}
+                    projects={projects} setProjects={setProjects} 
+                    students={students} setStudents={setStudents}
+                    conferences={conferences} setConferences={setConferences}
+                    openMarqueeManager={() => { setTempMarquee(marqueeText); setIsMarqueeModalOpen(true); }}
                   />
                 ) : (
                   <StudentWorkspace 
                     student={currentUser.studentData} 
-                    projects={projects} 
-                    setProjects={setProjects} 
+                    students={students} setStudents={setStudents}
+                    projects={projects} setProjects={setProjects}
+                    conferences={conferences}
                   />
                 )}
               </main>
 
-              <footer className="bg-white border-t py-4 text-center text-xs text-gray-400 font-medium">
-                &copy; 2026 MEG 研究室 新自強3000列車專案管理系統
-              </footer>
-
-              {/* 公告/跑馬燈設定 Modal (僅老師可見) */}
+              {/* 跑馬燈設定 */}
               {isMarqueeModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
-                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100">
-                    <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
-                      <h3 className="text-xl font-bold flex items-center"><i className="fa-solid fa-bullhorn mr-2"></i> 設定全站廣播跑馬燈</h3>
-                      <button onClick={() => setIsMarqueeModalOpen(false)} className="text-white hover:text-gray-200"><i className="fa-solid fa-xmark text-xl"></i></button>
-                    </div>
-                    <div className="p-6">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">請輸入新的廣播訊息：</label>
-                      <textarea 
-                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 text-gray-800"
-                        rows="4"
-                        value={tempMarquee}
-                        onChange={(e) => setTempMarquee(e.target.value)}
-                        placeholder="輸入要廣播給所有學生的激勵語或公告..."
-                      ></textarea>
-                      <div className="mt-2 text-xs text-gray-500 flex items-center">
-                        <i className="fa-solid fa-circle-info mr-1"></i> 此訊息將會立刻顯示在所有乘客的畫面最上方。
-                      </div>
-                      <div className="flex justify-end gap-3 mt-6">
-                        <button onClick={() => setIsMarqueeModalOpen(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">取消</button>
-                        <button onClick={() => { 
-                          setMarqueeText(tempMarquee); 
-                          setIsMarqueeModalOpen(false); 
-                          syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });
-                        }} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition flex items-center">
-                          <i className="fa-solid fa-satellite-dish mr-2"></i> 發布廣播
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"><div className="bg-indigo-600 p-4 text-white flex justify-between items-center"><h3 className="font-bold">廣播跑馬燈</h3><button onClick={()=>setIsMarqueeModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button></div><div className="p-6"><textarea className="w-full p-3 border rounded-xl" rows="4" value={tempMarquee} onChange={(e) => setTempMarquee(e.target.value)}></textarea><div className="flex justify-end gap-3 mt-4"><button onClick={()=>setIsMarqueeModalOpen(false)} className="px-4 py-2 bg-gray-100 font-bold rounded-lg">取消</button><button onClick={() => { setMarqueeText(tempMarquee); setIsMarqueeModalOpen(false); syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });}} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg">發布廣播</button></div></div></div></div>
               )}
             </div>
           );
