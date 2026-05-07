@@ -97,7 +97,8 @@
 
         // --- 登入介面元件 ---
         const LoginScreen = ({ onLoginSuccess, students }) => {
-          const [devEmail, setDevEmail] = useState('');
+          // 預設填入老師的信箱，方便快速測試
+          const [devEmail, setDevEmail] = useState('composerho@gmail.com');
 
           useEffect(() => {
             const CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"; 
@@ -955,7 +956,8 @@
         // --- 主應用程式 ---
         const App = () => {
           const [currentUser, setCurrentUser] = useState(null); 
-          const TEACHER_EMAIL = "composerho@gmail.com"; // 🌟 更新：設定老師的信箱為 composerho@gmail.com
+          // 確保這裡的信箱為老師的 Gmail
+          const TEACHER_EMAIL = "composerho@gmail.com"; 
           
           const [students, setStudents] = useState([]);
           const [projects, setProjects] = useState([]);
