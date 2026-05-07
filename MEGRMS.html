@@ -265,6 +265,7 @@
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
 
           useEffect(() => {
+            // 🌟 已更新您的 CLIENT_ID
             const CLIENT_ID = "701247251903-878bdbdelfebt7tgm6sdlndtsirmv5li.apps.googleusercontent.com"; 
             if (window.google) {
               window.google.accounts.id.initialize({
@@ -323,6 +324,10 @@
           
           // 🌟 專案備忘錄 Modal State
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
+
+          // 🌟 老師幫學生新增專案 Modal State
+          const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+          const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0] });
 
           const [newStudent, setNewStudent] = useState({ name: '', degree: '', contactLink: '', email: '', localFolder: '' });
           
@@ -444,6 +449,31 @@
              setProjects(projects.map(p => p.id === projectId ? updated : p));
              syncToBackend('updateProject', updated);
              setEditingProjectNotes(null);
+          };
+
+          // 🌟 老師幫學生新增專案的處理函式
+          const handleAddProjectByTeacher = () => {
+            if(!newProjectForStudent.title.trim() || !manageStudentProjectsId) return;
+            const targetStudent = students.find(s => s.id === manageStudentProjectsId);
+            
+            const newProj = {
+              id: Date.now().toString(),
+              studentId: targetStudent.id,
+              studentName: targetStudent.name,
+              title: newProjectForStudent.title.trim(),
+              status: newProjectForStudent.status,
+              pendingStatus: null,
+              pendingDescription: null,
+              targetConference: null,
+              notes: '',
+              hasUnreadMemo: true, // 標記為未讀，讓學生注意
+              lastUpdate: new Date().toISOString().split('T')[0]
+            };
+            
+            setProjects([...projects, newProj]);
+            syncToBackend('addProject', newProj);
+            setIsAddProjectModalOpen(false);
+            setNewProjectForStudent({ title: '', status: STATUSES[0] });
           };
 
           const augmentedStudents = students.map(student => {
@@ -769,12 +799,21 @@
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="bg-indigo-800 p-4 text-white flex justify-between items-center">
-                      <h3 className="font-bold">
+                      <h3 className="font-bold flex items-center">
                         <i className="fa-solid fa-bars-progress mr-2"></i>
                         {students.find(s=>s.id === manageStudentProjectsId)?.name} 的專案管理
                       </h3>
                       <button onClick={() => { setManageStudentProjectsId(null); setDeletingProjectId(null); }}><i className="fa-solid fa-xmark text-xl"></i></button>
                     </div>
+                    
+                    {/* 🌟 老師可幫學生新增專案的操作區塊 */}
+                    <div className="bg-indigo-50 p-4 border-b border-indigo-100 flex justify-between items-center">
+                       <span className="text-indigo-800 font-bold text-sm">目前共有 {projects.filter(p => p.studentId === manageStudentProjectsId).length} 個專案</span>
+                       <button onClick={() => setIsAddProjectModalOpen(true)} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition text-sm flex items-center shadow-sm">
+                           <i className="fa-solid fa-plus mr-1.5"></i> 幫學生建立新專案
+                       </button>
+                    </div>
+
                     <div className="p-6 overflow-y-auto bg-gray-50 flex-grow">
                       {projects.filter(p => p.studentId === manageStudentProjectsId).length === 0 ? (
                         <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
@@ -824,6 +863,36 @@
                           ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 🌟 Modal: 老師幫學生新增專案 */}
+              {isAddProjectModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                    <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold"><i className="fa-solid fa-folder-plus mr-2"></i> 指派新專案給 {students.find(s=>s.id === manageStudentProjectsId)?.name}</h3>
+                      <button onClick={() => setIsAddProjectModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">專案名稱：</label>
+                      <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-4 bg-gray-50" placeholder="例如：消防逃生VR..." value={newProjectForStudent.title} onChange={(e) => setNewProjectForStudent({...newProjectForStudent, title: e.target.value})} autoFocus />
+                      
+                      <label className="block text-sm font-bold text-gray-700 mb-2">選擇專案的初始階段：</label>
+                      <select 
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-6 bg-white shadow-sm"
+                        value={newProjectForStudent.status}
+                        onChange={(e) => setNewProjectForStudent({...newProjectForStudent, status: e.target.value})}
+                      >
+                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+
+                      <div className="flex justify-end gap-3">
+                        <button onClick={() => setIsAddProjectModalOpen(false)} className="px-4 py-2 text-gray-600 font-bold bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+                        <button onClick={handleAddProjectByTeacher} disabled={!newProjectForStudent.title.trim()} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow">確認指派</button>
+                      </div>
                     </div>
                   </div>
                 </div>
