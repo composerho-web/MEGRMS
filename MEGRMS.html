@@ -38,6 +38,16 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* 豐富編輯器 (Rich Text) 專用樣式 */
+        .rich-content ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.5rem; }
+        .rich-content ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 0.5rem; }
+        .rich-content a { color: #4f46e5; text-decoration: underline; font-weight: bold; cursor: pointer; }
+        .rich-content a:hover { color: #3730a3; }
+        .rich-content p { margin-bottom: 0.5rem; min-height: 1rem; }
+        .rich-content b, .rich-content strong { font-weight: 900; }
+        .rich-content i, .rich-content em { font-style: italic; }
+        .rich-content u { text-decoration: underline; }
+        .rich-content strike { text-decoration: line-through; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
@@ -55,6 +65,14 @@
 
         // 🌟 您的 API 網址
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
+
+        // HTML 轉純文字 (供複製到剪貼簿使用)
+        const extractText = (html) => {
+            if(!html) return "";
+            const tmp = document.createElement("DIV");
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || "";
+        };
 
         // 通用複製剪貼簿函式
         const copyToClipboard = (text) => {
@@ -147,14 +165,76 @@
           </div>
         );
 
-        // 🌟 專案備忘錄 Modal (老師可編輯，學生唯讀並解除閃爍警示)
+        // 🌟 核心組件：輕量級 Rich Text Editor
+        const RichTextEditor = ({ initialValue, onChange, readOnly, placeholder }) => {
+            const editorRef = useRef(null);
+
+            useEffect(() => {
+                if (editorRef.current && initialValue !== undefined && !readOnly) {
+                    if(editorRef.current.innerHTML === '') {
+                         editorRef.current.innerHTML = initialValue || '';
+                    }
+                }
+            }, [initialValue, readOnly]);
+
+            const execCmd = (cmd, val = null) => {
+                document.execCommand(cmd, false, val);
+                if(editorRef.current) { 
+                    editorRef.current.focus(); 
+                    onChange(editorRef.current.innerHTML); 
+                }
+            };
+
+            const insertLink = () => {
+                const url = prompt("請輸入網址 (須包含 http:// 或 https://):", "https://");
+                if(url) execCmd('createLink', url);
+            };
+
+            if (readOnly) {
+                return (
+                    <div 
+                        className="rich-content text-sm text-gray-800 leading-relaxed bg-gray-100 p-4 rounded-xl border border-gray-200 min-h-[100px] overflow-y-auto" 
+                        dangerouslySetInnerHTML={{__html: initialValue || '<span class="text-gray-400">目前沒有備忘錄或指示。</span>'}}
+                    ></div>
+                );
+            }
+
+            return (
+                <div className="border border-gray-300 rounded-xl overflow-hidden bg-white flex flex-col h-full shadow-inner">
+                    <div className="bg-indigo-50/50 border-b border-gray-300 flex items-center p-2 gap-1 overflow-x-auto flex-wrap">
+                        <button type="button" onClick={() => execCmd('bold')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-800 font-bold" title="粗體">B</button>
+                        <button type="button" onClick={() => execCmd('italic')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-800 italic font-serif" title="斜體">I</button>
+                        <button type="button" onClick={() => execCmd('underline')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-800 underline" title="底線">U</button>
+                        <button type="button" onClick={() => execCmd('strikeThrough')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-800 line-through" title="刪除線">S</button>
+                        <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                        <button type="button" onClick={() => execCmd('justifyLeft')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-700" title="靠左對齊"><i className="fa-solid fa-align-left"></i></button>
+                        <button type="button" onClick={() => execCmd('justifyCenter')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-700" title="置中對齊"><i className="fa-solid fa-align-center"></i></button>
+                        <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                        <button type="button" onClick={() => execCmd('insertUnorderedList')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-700" title="項目符號"><i className="fa-solid fa-list-ul"></i></button>
+                        <button type="button" onClick={() => execCmd('insertOrderedList')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-gray-700" title="編號"><i className="fa-solid fa-list-ol"></i></button>
+                        <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                        <button type="button" onClick={insertLink} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-indigo-600" title="插入連結"><i className="fa-solid fa-link"></i></button>
+                        <button type="button" onClick={() => execCmd('unlink')} className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded text-red-500" title="移除連結"><i className="fa-solid fa-link-slash"></i></button>
+                    </div>
+                    <div 
+                        ref={editorRef}
+                        className="flex-grow p-4 outline-none overflow-y-auto rich-content text-sm leading-relaxed"
+                        contentEditable={true}
+                        onInput={(e) => onChange(e.currentTarget.innerHTML)}
+                        onBlur={(e) => onChange(e.currentTarget.innerHTML)}
+                        style={{ minHeight: '200px' }}
+                    ></div>
+                </div>
+            );
+        };
+
+        // 🌟 專案備忘錄 Modal (搭載 RichTextEditor)
         const ProjectNotesModal = ({ isOpen, onClose, project, onSave, isTeacher, markAsRead }) => {
             const [notes, setNotes] = useState("");
             
             useEffect(() => {
                 if (isOpen && project) {
                     setNotes(project.notes || "");
-                    // 若是學生開啟，且帶有未讀標記，則觸發已讀
                     if (!isTeacher && (project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true') && markAsRead) {
                         markAsRead(project.id);
                     }
@@ -165,27 +245,30 @@
 
             return (
                 <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl w-full max-w-3xl flex flex-col h-[80vh] shadow-2xl overflow-hidden border border-gray-200">
+                    <div className="bg-white rounded-2xl w-full max-w-4xl flex flex-col h-[85vh] shadow-2xl overflow-hidden border border-gray-200">
                         <div className={`p-4 text-white flex justify-between items-center shadow ${isTeacher ? 'bg-indigo-700' : 'bg-gray-800'}`}>
                             <h3 className="font-bold text-lg flex items-center">
                                 <i className="fa-solid fa-book-open mr-2"></i> 【{project.title}】專案備忘錄 {isTeacher ? "(編輯模式)" : "(唯讀模式)"}
                             </h3>
                             <button onClick={onClose} className="hover:text-gray-300 transition"><i className="fa-solid fa-xmark text-2xl"></i></button>
                         </div>
-                        <div className="p-6 flex-grow flex flex-col bg-gray-50">
+                        <div className="p-6 flex-grow flex flex-col bg-gray-50 overflow-hidden">
                             <label className="text-sm font-bold text-gray-700 mb-2">
-                                {isTeacher ? "在此輸入給學生的專案備忘錄與指示（學生僅能檢視）：" : "老師給的專案備忘錄與指示："}
+                                {isTeacher ? "在此編輯給學生的專案備忘錄與指示（支援粗體、超連結等）：" : "老師給的專案備忘錄與指示："}
                             </label>
-                            <textarea 
-                                className={`flex-grow p-4 border rounded-xl shadow-inner leading-relaxed resize-none ${isTeacher ? 'border-gray-300 focus:ring-2 focus:ring-indigo-500 bg-white text-gray-800' : 'border-gray-200 bg-gray-100 text-gray-700 cursor-default outline-none'}`} 
-                                value={notes} 
-                                onChange={(e) => isTeacher && setNotes(e.target.value)}
-                                placeholder={isTeacher ? "開始輸入專案備忘錄與修改方向..." : "目前沒有備忘錄。"}
-                                readOnly={!isTeacher}
-                            ></textarea>
-                            <div className="flex justify-between mt-5">
-                                <button onClick={() => copyToClipboard(notes)} className="px-5 py-2.5 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300 transition flex items-center shadow-sm border border-gray-300">
-                                    <i className="fa-regular fa-copy mr-2"></i> 全篇複製
+                            
+                            <div className="flex-grow overflow-hidden">
+                                <RichTextEditor 
+                                    initialValue={notes} 
+                                    onChange={setNotes} 
+                                    readOnly={!isTeacher} 
+                                    placeholder="開始輸入專案備忘錄與修改方向..." 
+                                />
+                            </div>
+
+                            <div className="flex justify-between mt-5 pt-2">
+                                <button onClick={() => copyToClipboard(extractText(notes))} className="px-5 py-2.5 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300 transition flex items-center shadow-sm border border-gray-300">
+                                    <i className="fa-regular fa-copy mr-2"></i> 複製純文字
                                 </button>
                                 <div className="flex gap-3">
                                     {isTeacher ? (
@@ -207,6 +290,49 @@
                 </div>
             );
         };
+
+        // 🌟 列車公告欄元件
+        const AnnouncementsBoard = ({ announcements }) => (
+          <Card className="border-t-4 border-t-blue-500 flex flex-col h-full">
+             <div className="p-4 border-b bg-blue-50/50 flex justify-between items-center">
+                <h3 className="font-bold text-gray-800"><i className="fa-solid fa-bullhorn text-blue-500 mr-2"></i>列車公告欄</h3>
+             </div>
+             <div className="p-4 flex-grow overflow-y-auto space-y-4 bg-gray-50/30" style={{maxHeight: '350px'}}>
+                {announcements.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">目前沒有公告。</p> :
+                 [...announcements].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(a => (
+                    <div key={a.id} className="bg-white border border-blue-100 rounded-lg p-4 shadow-sm hover:shadow-md transition">
+                       <div className="flex justify-between items-end border-b border-gray-100 pb-2 mb-3">
+                          <h4 className="font-bold text-indigo-900 text-lg">{a.title}</h4>
+                          <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full"><i className="fa-regular fa-clock mr-1"></i>{a.date}</span>
+                       </div>
+                       <div className="rich-content text-sm text-gray-700" dangerouslySetInnerHTML={{__html: a.content}}></div>
+                    </div>
+                 ))
+                }
+             </div>
+          </Card>
+        );
+
+        // 🌟 研究室常用連結元件
+        const UsefulLinksBoard = ({ links }) => (
+          <Card className="border-t-4 border-t-green-500 flex flex-col h-full">
+             <div className="p-4 border-b bg-green-50/50 flex justify-between items-center">
+                <h3 className="font-bold text-gray-800"><i className="fa-solid fa-link text-green-500 mr-2"></i>研究室常用連結</h3>
+             </div>
+             <div className="p-4 flex-grow overflow-y-auto space-y-3 bg-gray-50/30" style={{maxHeight: '350px'}}>
+                {links.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">目前沒有常用連結。</p> :
+                 links.map(link => (
+                    <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="block bg-white border border-gray-200 hover:border-green-400 hover:shadow-md rounded-lg p-3 transition group">
+                       <div className="font-bold text-green-700 group-hover:text-green-800 flex items-center">
+                          <i className="fa-solid fa-arrow-up-right-from-square mr-2 text-xs opacity-70"></i> {link.title}
+                       </div>
+                       {link.description && <p className="text-[11px] text-gray-500 mt-1.5 leading-tight">{link.description}</p>}
+                    </a>
+                 ))
+                }
+             </div>
+          </Card>
+        );
 
         // 🌟 成就儀表板 (動態牆)
         const AchievementDashboard = ({ projects, students }) => {
@@ -265,7 +391,6 @@
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
 
           useEffect(() => {
-            // 🌟 已更新您的 CLIENT_ID
             const CLIENT_ID = "701247251903-878bdbdelfebt7tgm6sdlndtsirmv5li.apps.googleusercontent.com"; 
             if (window.google) {
               window.google.accounts.id.initialize({
@@ -313,27 +438,40 @@
         };
 
         // --- 老師儀表板 ---
-        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, openMarqueeManager }) => {
+        const TeacherDashboard = ({ 
+            projects, setProjects, students, setStudents, conferences, setConferences, 
+            announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager 
+        }) => {
           const [sortBy, setSortBy] = useState('latest'); 
           const [filterDegree, setFilterDegree] = useState('all');
           const [filterStatus, setFilterStatus] = useState('all'); 
           
           const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
+          const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
+          const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
+
           const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
           
-          // 🌟 專案備忘錄 Modal State
+          // Modal States
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
-
-          // 🌟 老師幫學生新增專案 Modal State
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-          const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0] });
-
-          const [newStudent, setNewStudent] = useState({ name: '', degree: '', contactLink: '', email: '', localFolder: '' });
           
+          // Form States
+          const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '' });
+          const [newStudent, setNewStudent] = useState({ name: '', degree: '', contactLink: '', email: '', localFolder: '' });
           const [newConf, setNewConf] = useState({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
           const [editingConfId, setEditingConfId] = useState(null);
           const [editConfData, setEditConfData] = useState({});
+
+          // Announcements & Links Form States
+          const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
+          const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
+          const [editAnnouncementData, setEditAnnouncementData] = useState({});
+
+          const [newLink, setNewLink] = useState({ title: '', url: '', description: '' });
+          const [editingLinkId, setEditingLinkId] = useState(null);
+          const [editLinkData, setEditLinkData] = useState({});
 
           const [deletingProjectId, setDeletingProjectId] = useState(null);
           const [deleteReason, setDeleteReason] = useState("");
@@ -341,6 +479,7 @@
           const pendingApprovals = projects.filter(p => p.pendingStatus !== null);
           const stagnantProjects = projects.filter(p => p.status.includes("概念發想") && p.pendingStatus === null);
 
+          // Approval actions
           const handleApprove = (projectId) => {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
@@ -393,21 +532,15 @@
             setNewStudent({ name: '', degree: '', contactLink: '', email: '', localFolder: '' });
           };
 
+          // Conf actions
           const handleAddConfSubmit = () => {
             if (!newConf.name || !newConf.confirmDeadline) return alert("名稱與確認死線為必填！");
-            const conf = {
-              id: 'c' + Date.now(),
-              name: newConf.name,
-              url: newConf.url,
-              submitDeadline: newConf.submitDeadline,
-              confirmDeadline: newConf.confirmDeadline
-            };
+            const conf = { id: 'c' + Date.now(), ...newConf };
             const updatedConfs = [...conferences, conf];
             setConferences(updatedConfs);
             syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
             setNewConf({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
           };
-
           const handleSaveEditConf = () => {
             if (!editConfData.name || !editConfData.confirmDeadline) return alert("名稱與確認死線為必填！");
             const updatedConfs = conferences.map(c => c.id === editingConfId ? editConfData : c);
@@ -415,14 +548,65 @@
             syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
             setEditingConfId(null);
           };
-
           const handleDeleteConf = (confId) => {
-            if(!confirm("確定要刪除這個研討會選項嗎？這會同時移除所有專案綁定的目標設定。")) return;
+            if(!confirm("確定要刪除嗎？")) return;
             const updatedConfs = conferences.filter(c => c.id !== confId);
             setConferences(updatedConfs);
             syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
           };
 
+          // Announcements Actions
+          const handleAddAnnouncement = () => {
+             if (!newAnnouncement.title || !newAnnouncement.content) return alert("標題與內容為必填！");
+             const ann = { 
+                 id: 'a' + Date.now(), 
+                 title: newAnnouncement.title, 
+                 content: newAnnouncement.content,
+                 date: new Date().toLocaleDateString('zh-TW')
+             };
+             const updatedAnns = [...announcements, ann];
+             setAnnouncements(updatedAnns);
+             syncToBackend('updateConfig', { key: 'announcementsList', value: JSON.stringify(updatedAnns) });
+             setNewAnnouncement({ title: '', content: '' });
+          };
+          const handleSaveEditAnnouncement = () => {
+             if (!editAnnouncementData.title || !editAnnouncementData.content) return alert("標題與內容為必填！");
+             const updatedAnns = announcements.map(a => a.id === editingAnnouncementId ? editAnnouncementData : a);
+             setAnnouncements(updatedAnns);
+             syncToBackend('updateConfig', { key: 'announcementsList', value: JSON.stringify(updatedAnns) });
+             setEditingAnnouncementId(null);
+          };
+          const handleDeleteAnnouncement = (id) => {
+             if(!confirm("確定要刪除此公告嗎？")) return;
+             const updatedAnns = announcements.filter(a => a.id !== id);
+             setAnnouncements(updatedAnns);
+             syncToBackend('updateConfig', { key: 'announcementsList', value: JSON.stringify(updatedAnns) });
+          };
+
+          // Links Actions
+          const handleAddLink = () => {
+             if (!newLink.title || !newLink.url) return alert("標題與網址為必填！");
+             const link = { id: 'l' + Date.now(), ...newLink };
+             const updatedLinks = [...usefulLinks, link];
+             setUsefulLinks(updatedLinks);
+             syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updatedLinks) });
+             setNewLink({ title: '', url: '', description: '' });
+          };
+          const handleSaveEditLink = () => {
+             if (!editLinkData.title || !editLinkData.url) return alert("標題與網址為必填！");
+             const updatedLinks = usefulLinks.map(l => l.id === editingLinkId ? editLinkData : l);
+             setUsefulLinks(updatedLinks);
+             syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updatedLinks) });
+             setEditingLinkId(null);
+          };
+          const handleDeleteLink = (id) => {
+             if(!confirm("確定要刪除此連結嗎？")) return;
+             const updatedLinks = usefulLinks.filter(l => l.id !== id);
+             setUsefulLinks(updatedLinks);
+             syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updatedLinks) });
+          };
+
+          // Project Deletion
           const handleDeleteProjectSubmit = () => {
             if (!deleteReason.trim()) return alert("請輸入刪除說明或原因！");
             const project = projects.find(p => p.id === deletingProjectId);
@@ -441,17 +625,14 @@
             setDeleteReason("");
           };
 
-          // 🌟 老師儲存備忘錄並自動標記為未讀
           const handleSaveProjectNotes = (projectId, notesText) => {
              const project = projects.find(p => p.id === projectId);
-             // 寫入備忘錄，同時設定 hasUnreadMemo 為 true 觸發學生端警示
              const updated = { ...project, notes: notesText, hasUnreadMemo: true };
              setProjects(projects.map(p => p.id === projectId ? updated : p));
              syncToBackend('updateProject', updated);
              setEditingProjectNotes(null);
           };
 
-          // 🌟 老師幫學生新增專案的處理函式
           const handleAddProjectByTeacher = () => {
             if(!newProjectForStudent.title.trim() || !manageStudentProjectsId) return;
             const targetStudent = students.find(s => s.id === manageStudentProjectsId);
@@ -462,18 +643,29 @@
               studentName: targetStudent.name,
               title: newProjectForStudent.title.trim(),
               status: newProjectForStudent.status,
+              mentors: newProjectForStudent.mentors.trim(),
               pendingStatus: null,
               pendingDescription: null,
               targetConference: null,
               notes: '',
-              hasUnreadMemo: true, // 標記為未讀，讓學生注意
+              hasUnreadMemo: true, 
               lastUpdate: new Date().toISOString().split('T')[0]
             };
             
             setProjects([...projects, newProj]);
             syncToBackend('addProject', newProj);
             setIsAddProjectModalOpen(false);
-            setNewProjectForStudent({ title: '', status: STATUSES[0] });
+            setNewProjectForStudent({ title: '', status: STATUSES[0], mentors: '' });
+          };
+
+          // Update existing project mentors on blur
+          const handleUpdateMentors = (projectId, newMentors) => {
+              const project = projects.find(p => p.id === projectId);
+              if (project.mentors !== newMentors) {
+                  const updated = { ...project, mentors: newMentors };
+                  setProjects(projects.map(p => p.id === projectId ? updated : p));
+                  syncToBackend('updateProject', updated);
+              }
           };
 
           const augmentedStudents = students.map(student => {
@@ -505,17 +697,29 @@
             <div className="space-y-6 animate-fade-in">
               <AchievementDashboard projects={projects} students={students} />
 
+              {/* 兩大共用看板區塊 (公告與常用連結) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                 <AnnouncementsBoard announcements={announcements} />
+                 <UsefulLinksBoard links={usefulLinks} />
+              </div>
+
               {/* 頂部管理控制列 */}
               <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 gap-4">
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                   <i className="fa-solid fa-chart-line text-indigo-600 mr-3"></i> 列車長指揮中心
                 </h2>
-                <div className="flex gap-2">
-                  <button onClick={() => setIsConfModalOpen(true)} className="px-4 py-2 bg-teal-50 text-teal-700 rounded-lg font-medium hover:bg-teal-100 transition shadow-sm border border-teal-100">
-                    <i className="fa-solid fa-calendar-check mr-2"></i> 研討會清單管理
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setIsAnnouncementsModalOpen(true)} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm hover:bg-blue-100 transition border border-blue-100 shadow-sm">
+                    <i className="fa-solid fa-bullhorn mr-1.5"></i> 公告管理
                   </button>
-                  <button onClick={openMarqueeManager} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium hover:bg-indigo-100 transition shadow-sm border border-indigo-100">
-                    <i className="fa-solid fa-bullhorn mr-2"></i> 廣播與公告
+                  <button onClick={() => setIsLinksModalOpen(true)} className="px-3 py-2 bg-green-50 text-green-700 rounded-lg font-bold text-sm hover:bg-green-100 transition border border-green-100 shadow-sm">
+                    <i className="fa-solid fa-link mr-1.5"></i> 連結管理
+                  </button>
+                  <button onClick={() => setIsConfModalOpen(true)} className="px-3 py-2 bg-teal-50 text-teal-700 rounded-lg font-bold text-sm hover:bg-teal-100 transition border border-teal-100 shadow-sm">
+                    <i className="fa-solid fa-calendar-check mr-1.5"></i> 研討會管理
+                  </button>
+                  <button onClick={openMarqueeManager} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-bold text-sm hover:bg-indigo-100 transition border border-indigo-100 shadow-sm">
+                    <i className="fa-solid fa-tower-broadcast mr-1.5"></i> 跑馬燈
                   </button>
                 </div>
               </div>
@@ -540,7 +744,6 @@
                           <div>
                             <div className="font-bold text-indigo-900 text-lg flex items-center">
                               {project.studentName} <span className="text-gray-400 font-normal text-sm mx-2">|</span> {project.title}
-                              {/* 🌟 老師儀表板：專案備忘錄入口 */}
                               <button onClick={() => setEditingProjectNotes(project)} className="ml-3 text-[11px] bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-100 transition flex items-center">
                                 <i className="fa-solid fa-book-open mr-1"></i> 專案備忘錄
                               </button>
@@ -590,7 +793,6 @@
                             </div>
                           </div>
                           <div className="flex gap-1">
-                            {/* 🌟 老師儀表板：一鍵開啟備忘錄 */}
                             <button onClick={() => setEditingProjectNotes(project)} className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition" title="專案備忘錄"><i className="fa-solid fa-book-open"></i></button>
                             <button className="text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded transition" title="提醒學生">提醒</button>
                           </div>
@@ -697,18 +899,129 @@
                       </div>
                     </Card>
                   ))}
-                  
-                  {processedStudents.length === 0 && (
-                    <div className="col-span-full text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500">
-                      <p>沒有符合條件的學生。</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
+              {/* 🌟 Modal: 列車公告欄管理 */}
+              {isAnnouncementsModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-blue-700 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold"><i className="fa-solid fa-bullhorn mr-2"></i> 列車公告欄管理</h3>
+                      <button onClick={() => setIsAnnouncementsModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-grow bg-gray-50">
+                      <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-200 mb-6">
+                        <h4 className="font-bold text-blue-800 mb-3 border-b pb-2"><i className="fa-solid fa-plus mr-1"></i> 發布新公告</h4>
+                        <div className="mb-3">
+                           <label className="block text-gray-700 font-bold mb-1 text-sm">公告標題 *</label>
+                           <input type="text" className="w-full p-2 border rounded focus:ring-blue-500" value={newAnnouncement.title} onChange={e=>setNewAnnouncement({...newAnnouncement, title: e.target.value})} placeholder="請輸入標題"/>
+                        </div>
+                        <div>
+                           <label className="block text-gray-700 font-bold mb-1 text-sm">公告內容 (支援豐富文字格式) *</label>
+                           <RichTextEditor initialValue={newAnnouncement.content} onChange={(html) => setNewAnnouncement({...newAnnouncement, content: html})} placeholder="在此撰寫公告內容..." />
+                        </div>
+                        <div className="mt-4 text-right">
+                          <button onClick={handleAddAnnouncement} className="px-5 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 shadow">發布公告</button>
+                        </div>
+                      </div>
+
+                      <h4 className="font-bold text-gray-700 mb-3">歷史公告列表：</h4>
+                      <div className="space-y-4">
+                        {announcements.length === 0 ? <p className="text-gray-400 text-center py-4 text-sm">尚未發布公告。</p> :
+                          [...announcements].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(ann => (
+                            <div key={ann.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                              {editingAnnouncementId === ann.id ? (
+                                <div>
+                                   <input type="text" className="w-full p-2 border rounded font-bold mb-3" value={editAnnouncementData.title} onChange={e => setEditAnnouncementData({...editAnnouncementData, title: e.target.value})} />
+                                   <RichTextEditor initialValue={editAnnouncementData.content} onChange={(html) => setEditAnnouncementData({...editAnnouncementData, content: html})} />
+                                   <div className="flex justify-end gap-2 mt-4">
+                                      <button onClick={() => setEditingAnnouncementId(null)} className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-bold rounded">取消</button>
+                                      <button onClick={handleSaveEditAnnouncement} className="px-3 py-1.5 bg-blue-600 text-white text-sm font-bold rounded shadow">儲存變更</button>
+                                   </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-grow">
+                                    <h5 className="font-bold text-lg text-indigo-900">{ann.title}</h5>
+                                    <span className="text-[10px] text-gray-500 mb-2 block">{ann.date}</span>
+                                    <div className="rich-content text-sm text-gray-700" dangerouslySetInnerHTML={{__html: ann.content}}></div>
+                                  </div>
+                                  <div className="flex gap-2 ml-4 shrink-0">
+                                    <button onClick={() => { setEditingAnnouncementId(ann.id); setEditAnnouncementData(ann); }} className="text-gray-500 hover:text-blue-600 bg-gray-50 p-2 rounded"><i className="fa-solid fa-pen-to-square"></i></button>
+                                    <button onClick={() => handleDeleteAnnouncement(ann.id)} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded"><i className="fa-solid fa-trash"></i></button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 🌟 Modal: 研究室常用連結管理 */}
+              {isLinksModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-green-700 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold"><i className="fa-solid fa-link mr-2"></i> 常用連結管理</h3>
+                      <button onClick={() => setIsLinksModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-grow bg-gray-50">
+                      <div className="bg-white p-4 rounded-lg shadow-sm border border-green-200 mb-6">
+                        <h4 className="font-bold text-green-800 mb-3 border-b pb-2"><i className="fa-solid fa-plus mr-1"></i> 新增連結</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                           <div><label className="block text-gray-700 text-sm font-bold mb-1">標題 *</label><input type="text" className="w-full p-2 border rounded focus:ring-green-500" value={newLink.title} onChange={e=>setNewLink({...newLink, title: e.target.value})} placeholder="例如: 雲端共用資料夾"/></div>
+                           <div><label className="block text-gray-700 text-sm font-bold mb-1">網址 (URL) *</label><input type="url" className="w-full p-2 border rounded focus:ring-green-500" value={newLink.url} onChange={e=>setNewLink({...newLink, url: e.target.value})} placeholder="https://..."/></div>
+                        </div>
+                        <div><label className="block text-gray-700 text-sm font-bold mb-1">簡短說明 (選填)</label><input type="text" className="w-full p-2 border rounded focus:ring-green-500 text-sm" value={newLink.description} onChange={e=>setNewLink({...newLink, description: e.target.value})} placeholder="例如: 歷屆學長姐畢業論文存放區"/></div>
+                        <div className="mt-3 text-right">
+                          <button onClick={handleAddLink} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 shadow">新增連結</button>
+                        </div>
+                      </div>
+
+                      <h4 className="font-bold text-gray-700 mb-3">目前連結清單：</h4>
+                      <div className="space-y-3">
+                        {usefulLinks.length === 0 ? <p className="text-gray-400 text-center py-4 text-sm">尚未建立連結。</p> :
+                          usefulLinks.map(link => (
+                            <div key={link.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                              {editingLinkId === link.id ? (
+                                <div className="space-y-2">
+                                   <input type="text" className="w-full p-1.5 border rounded text-sm" value={editLinkData.title} onChange={e => setEditLinkData({...editLinkData, title: e.target.value})} placeholder="標題"/>
+                                   <input type="url" className="w-full p-1.5 border rounded text-sm" value={editLinkData.url} onChange={e => setEditLinkData({...editLinkData, url: e.target.value})} placeholder="URL"/>
+                                   <input type="text" className="w-full p-1.5 border rounded text-sm" value={editLinkData.description} onChange={e => setEditLinkData({...editLinkData, description: e.target.value})} placeholder="說明"/>
+                                   <div className="flex justify-end gap-2 pt-2">
+                                      <button onClick={() => setEditingLinkId(null)} className="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded">取消</button>
+                                      <button onClick={handleSaveEditLink} className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded shadow">儲存</button>
+                                   </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <h5 className="font-bold text-green-700 text-lg"><a href={link.url} target="_blank" rel="noreferrer" className="hover:underline">{link.title} <i className="fa-solid fa-arrow-up-right-from-square text-xs ml-1 opacity-50"></i></a></h5>
+                                    {link.description && <p className="text-xs text-gray-500 mt-1">{link.description}</p>}
+                                  </div>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button onClick={() => { setEditingLinkId(link.id); setEditLinkData(link); }} className="text-gray-500 hover:text-green-600 bg-gray-50 p-2 rounded"><i className="fa-solid fa-pen-to-square"></i></button>
+                                    <button onClick={() => handleDeleteLink(link.id)} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded"><i className="fa-solid fa-trash"></i></button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Modal: 新增學生 */}
               {isAddStudentOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
                     <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
                       <h3 className="font-bold"><i className="fa-solid fa-user-plus mr-2"></i>新增乘客帳號</h3>
@@ -731,7 +1044,7 @@
 
               {/* Modal: 研討會管理 */}
               {isConfModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="bg-teal-600 p-4 text-white flex justify-between items-center">
                       <h3 className="font-bold"><i className="fa-solid fa-calendar-check mr-2"></i>研討會目標清單管理</h3>
@@ -796,8 +1109,8 @@
 
               {/* Modal: 專案管理與刪除 */}
               {manageStudentProjectsId && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="bg-indigo-800 p-4 text-white flex justify-between items-center">
                       <h3 className="font-bold flex items-center">
                         <i className="fa-solid fa-bars-progress mr-2"></i>
@@ -825,11 +1138,23 @@
                           {projects.filter(p => p.studentId === manageStudentProjectsId).map(project => (
                             <div key={project.id} className={`bg-white border rounded-xl p-5 shadow-sm transition ${deletingProjectId === project.id ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-200 hover:shadow-md'}`}>
                               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                                <div className="flex-grow">
+                                <div className="flex-grow w-full">
                                   <h4 className="font-black text-xl text-gray-800 mb-2">{project.title}</h4>
+                                  
+                                  {/* 🌟 老師端即時修改「指導學長姐/專家」 */}
+                                  <div className="mb-4 text-sm flex items-center bg-gray-50 p-2 rounded-lg border border-gray-200 w-full sm:w-2/3">
+                                      <span className="text-gray-600 font-bold shrink-0"><i className="fa-solid fa-user-tie mr-1.5"></i> 指導專家/學長姐：</span>
+                                      <input
+                                          type="text"
+                                          className="flex-grow ml-2 border-b border-gray-300 focus:border-indigo-500 focus:outline-none bg-transparent py-0.5 text-indigo-700 font-medium"
+                                          defaultValue={project.mentors || ""}
+                                          onBlur={(e) => handleUpdateMentors(project.id, e.target.value)}
+                                          placeholder="無 (點擊可輸入專家或學長姐姓名)"
+                                      />
+                                  </div>
+
                                   <div className="flex flex-wrap items-center gap-3">
                                     <StatusBadge status={project.status} />
-                                    {/* 🌟 老師管理專案時的備忘錄按鈕 */}
                                     <button onClick={() => setEditingProjectNotes(project)} className="text-xs bg-indigo-600 text-white font-bold px-3 py-1.5 rounded-md hover:bg-indigo-700 transition shadow flex items-center">
                                       <i className="fa-solid fa-book-open mr-1.5"></i> 專案備忘錄
                                     </button>
@@ -868,7 +1193,7 @@
                 </div>
               )}
 
-              {/* 🌟 Modal: 老師幫學生新增專案 */}
+              {/* 🌟 Modal: 老師幫學生新增專案 (含指導專家欄位) */}
               {isAddProjectModalOpen && (
                 <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
@@ -877,10 +1202,13 @@
                       <button onClick={() => setIsAddProjectModalOpen(false)}><i className="fa-solid fa-xmark text-xl"></i></button>
                     </div>
                     <div className="p-6">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">專案名稱：</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">專案名稱 *</label>
                       <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-4 bg-gray-50" placeholder="例如：消防逃生VR..." value={newProjectForStudent.title} onChange={(e) => setNewProjectForStudent({...newProjectForStudent, title: e.target.value})} autoFocus />
                       
-                      <label className="block text-sm font-bold text-gray-700 mb-2">選擇專案的初始階段：</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">指導學長姐/專家 (可選填)</label>
+                      <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-4 bg-gray-50" placeholder="例如：張博班, 李專家..." value={newProjectForStudent.mentors} onChange={(e) => setNewProjectForStudent({...newProjectForStudent, mentors: e.target.value})} />
+
+                      <label className="block text-sm font-bold text-gray-700 mb-2">選擇專案的初始階段 *</label>
                       <select 
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-6 bg-white shadow-sm"
                         value={newProjectForStudent.status}
@@ -911,7 +1239,7 @@
         };
 
         // --- 學生工作區 ---
-        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences }) => {
+        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
           if (!student) {
             return (
               <div className="text-center py-20 animate-pulse">
@@ -931,7 +1259,6 @@
           const [isEditingDegree, setIsEditingDegree] = useState(false);
           const [tempDegree, setTempDegree] = useState(student.degree || "");
           
-          // 🌟 專案備忘錄 Modal State
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
 
           const [hasCheckedExpiry, setHasCheckedExpiry] = useState(false);
@@ -998,6 +1325,7 @@
               studentName: student.name,
               title: newTitle.trim(),
               status: '💭 概念發想未經報告',
+              mentors: '',
               pendingStatus: null,
               pendingDescription: null,
               targetConference: null,
@@ -1011,7 +1339,6 @@
             setNewTitle('');
           };
 
-          // 學生端觸發已讀
           const handleMarkMemoAsRead = (projectId) => {
              const project = projects.find(p => p.id === projectId);
              if (project && (project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true')) {
@@ -1024,6 +1351,12 @@
           return (
             <div className="space-y-8 animate-fade-in">
               <AchievementDashboard projects={projects} students={students} />
+
+              {/* 兩大看板區塊：學生端僅限唯讀 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                 <AnnouncementsBoard announcements={announcements} />
+                 <UsefulLinksBoard links={usefulLinks} />
+              </div>
 
               {/* 學生資訊與聯絡列 */}
               <div className="flex flex-col md:flex-row justify-between items-end md:items-center border-b border-gray-200 pb-4">
@@ -1081,7 +1414,6 @@
                      }
                    }
                    
-                   // 判斷是否為未讀狀態
                    const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
 
                    return (
@@ -1094,11 +1426,17 @@
                     <div className="p-6 flex-grow flex flex-col">
                       <h3 className="font-extrabold text-2xl text-gray-900 leading-tight mb-2">{project.title}</h3>
                       
+                      {/* 🌟 學生專案卡片顯示指導學長姐 */}
+                      {project.mentors && project.mentors.trim() !== '' && (
+                         <div className="mb-3 text-sm text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 flex items-center inline-flex font-bold">
+                             <i className="fa-solid fa-user-tie mr-2 text-indigo-500"></i> 指導專家/學長姐：{project.mentors}
+                         </div>
+                      )}
+
                       <div className="mb-4">
                          <StatusBadge status={project.status} />
                       </div>
 
-                      {/* 🌟 學生專案卡片：醒目的備忘錄按鈕 (帶有未讀警示) */}
                       <button 
                         onClick={() => setEditingProjectNotes(project)} 
                         className={`w-full mb-5 py-2.5 font-bold rounded-xl border-2 transition shadow-sm flex justify-center items-center group ${isUnread ? 'bg-red-50 text-red-700 border-red-300 animate-pulse hover:bg-red-100 ring-2 ring-red-400 ring-offset-1' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}
@@ -1217,6 +1555,8 @@
           const [students, setStudents] = useState([]);
           const [projects, setProjects] = useState([]);
           const [conferences, setConferences] = useState([]); 
+          const [announcements, setAnnouncements] = useState([]);
+          const [usefulLinks, setUsefulLinks] = useState([]);
           const [marqueeText, setMarqueeText] = useState("連線中...");
           const [isLoading, setIsLoading] = useState(true);
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
@@ -1235,8 +1575,17 @@
                   
                   const confConfig = data.config.find(c => c.key === 'conferencesList');
                   if (confConfig && confConfig.value) {
-                     try { setConferences(JSON.parse(confConfig.value)); } 
-                     catch(e) { console.error("解析研討會清單失敗", e); }
+                     try { setConferences(JSON.parse(confConfig.value)); } catch(e) {}
+                  }
+
+                  const annConfig = data.config.find(c => c.key === 'announcementsList');
+                  if (annConfig && annConfig.value) {
+                     try { setAnnouncements(JSON.parse(annConfig.value)); } catch(e) {}
+                  }
+
+                  const linkConfig = data.config.find(c => c.key === 'usefulLinksList');
+                  if (linkConfig && linkConfig.value) {
+                     try { setUsefulLinks(JSON.parse(linkConfig.value)); } catch(e) {}
                   }
                 }
                 setIsLoading(false);
@@ -1307,6 +1656,8 @@
                     projects={projects} setProjects={setProjects} 
                     students={students} setStudents={setStudents}
                     conferences={conferences} setConferences={setConferences}
+                    announcements={announcements} setAnnouncements={setAnnouncements}
+                    usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks}
                     openMarqueeManager={() => { setTempMarquee(marqueeText); setIsMarqueeModalOpen(true); }}
                   />
                 ) : (
@@ -1315,6 +1666,7 @@
                     students={students} setStudents={setStudents}
                     projects={projects} setProjects={setProjects}
                     conferences={conferences}
+                    announcements={announcements} usefulLinks={usefulLinks}
                   />
                 )}
               </main>
