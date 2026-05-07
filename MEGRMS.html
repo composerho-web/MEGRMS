@@ -53,14 +53,51 @@
           "📜 學位論文撰寫中", "📌 其他"
         ];
 
-        // 🌟 您的 API 網址 (更新為最新版)
+        // 🌟 您的 API 網址 (維持最新版)
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
 
+        // 🌟 升級版：加入資料庫連線報錯機制
         const syncToBackend = (action, data) => {
+          // 顯示處理中的 Toast 提示
+          const toastId = 'toast-' + Date.now();
+          const toast = document.createElement('div');
+          toast.id = toastId;
+          toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-2xl z-50 text-sm animate-fade-in flex items-center border border-gray-700';
+          toast.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-3 text-indigo-400"></i> 正在同步至資料庫...';
+          document.body.appendChild(toast);
+
           fetch(GAS_API_URL, {
             method: 'POST',
             body: JSON.stringify({ action, data })
-          }).catch(err => console.error("同步失敗:", err));
+          })
+          .then(res => res.json())
+          .then(result => {
+            const currentToast = document.getElementById(toastId);
+            if (currentToast) currentToast.remove();
+
+            if (!result.success) {
+              // 🔴 後端明確報錯：彈出錯誤視窗讓使用者除錯
+              alert(`❌ 資料庫寫入失敗！\n\n動作：${action}\n錯誤原因：\n${result.error}\n\n這通常是因為 Apps Script 沒有成功發布「新版本」，或是表格名稱/欄位有錯誤。`);
+              console.error("Backend Error:", result.error);
+            } else {
+              // 🟢 成功寫入
+              const successToast = document.createElement('div');
+              successToast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-3 rounded-lg shadow-2xl z-50 text-sm animate-fade-in flex items-center border border-green-500';
+              successToast.innerHTML = '<i class="fa-solid fa-check mr-3"></i> 同步成功！';
+              document.body.appendChild(successToast);
+              setTimeout(() => {
+                successToast.style.opacity = '0';
+                successToast.style.transition = 'opacity 0.5s';
+                setTimeout(() => successToast.remove(), 500);
+              }, 2000);
+            }
+          })
+          .catch(err => {
+            const currentToast = document.getElementById(toastId);
+            if (currentToast) currentToast.remove();
+            console.error("同步例外錯誤:", err);
+            alert(`❌ 網路連線異常或 API 網址失效！\n\n詳細資訊: ${err.message}`);
+          });
         };
 
         const calculateDaysLeft = (targetDate) => {
