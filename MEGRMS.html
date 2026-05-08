@@ -48,7 +48,8 @@
         ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; border: 2px solid #f1f5f9; }
         ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
-        .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2; overflow: hidden; background-image: url('https://i.ibb.co/93ryGND0/Gemini-Generated-Image-m3tar8m3tar8m3ta.png'); background-size: cover; background-position: center; background-attachment: fixed; }
+        /* 背景移除了原本寫死的圖片，交由 JS 動態隨機指派，並加上柔和過場動畫 */
+        .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2; overflow: hidden; background-size: cover; background-position: center; background-attachment: fixed; transition: background-image 1.5s ease-in-out; }
         
         .cloud { position: absolute; font-size: 4rem; opacity: 0.4; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); }
         .cloud-1 { top: 10%; animation: float-cloud 40s linear infinite; }
@@ -59,7 +60,25 @@
 </head>
 <body class="text-gray-800">
     <!-- 底層背景圖 -->
-    <div class="bg-shapes"></div>
+    <div id="main-bg" class="bg-shapes"></div>
+    
+    <!-- 隨機背景腳本 -->
+    <script>
+        const bgImages = [
+            'https://i.ibb.co/93ryGND0/Gemini-Generated-Image-m3tar8m3tar8m3ta.png', // 原本的背景
+            'https://i.ibb.co/p6Ychh0W/4cc47737-5401-454d-9262-28f1c8eefd37.jpg',    // 新增 1
+            'https://i.ibb.co/pBSmcN9g/9c91dd69-35eb-4b22-89a8-2d5d913805bc.jpg'     // 新增 2
+        ];
+        
+        // 將換背景功能掛載到 window，讓 React 登出時也能呼叫
+        window.changeBackground = function() {
+            const randomBg = bgImages[Math.floor(Math.random() * bgImages.length)];
+            document.getElementById('main-bg').style.backgroundImage = `url('${randomBg}')`;
+        };
+
+        // 頁面初始載入時，立刻抽換一次背景
+        window.changeBackground();
+    </script>
     
     <!-- 動態背景遮罩 (交由 React 控制清晰度) -->
     <div id="bg-overlay" class="fixed top-0 left-0 w-full h-full z-[-1] bg-transparent backdrop-blur-none transition-all duration-1000"></div>
@@ -1582,7 +1601,8 @@
                           <span className="font-bold text-indigo-900 text-sm">{currentUser.name}</span>
                           <span className="text-xs text-indigo-500 ml-2 font-black bg-indigo-100 px-2 py-0.5 rounded-md">{currentUser.role === 'teacher' ? '列車長' : '乘客'}</span>
                       </div>
-                      <button onClick={()=>setCurrentUser(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-rose-100 hover:text-rose-600 transition shadow-sm">
+                      {/* 🌟 登出時順便呼叫 window.changeBackground() 變換背景 */}
+                      <button onClick={() => { setCurrentUser(null); if(window.changeBackground) window.changeBackground(); }} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-rose-100 hover:text-rose-600 transition shadow-sm">
                           <i className="fa-solid fa-right-from-bracket mr-1"></i> 登出
                       </button>
                   </div>
