@@ -476,7 +476,7 @@
           }, []);
 
           return (
-            <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
               <div className="bg-white/90 backdrop-blur-xl max-w-md w-full rounded-[2.5rem] shadow-[0_20px_60px_rgba(0,0,0,0.1)] overflow-hidden animate-modal-pop border-[6px] border-white relative z-10">
                 <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-10 text-center relative overflow-hidden">
                   <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-4 drop-shadow-2xl animate-bounce-soft object-contain" />
@@ -492,6 +492,9 @@
                     <button onClick={() => onLoginSuccess(devEmail, '測試用戶', '')} className="w-full py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 shadow-md">模擬上車</button>
                   </div>
                 </div>
+              </div>
+              <div className="mt-8 text-xs font-black text-indigo-800/60 bg-white/50 px-5 py-2 rounded-full border border-indigo-100 backdrop-blur-sm z-10">
+                  (C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流
               </div>
             </div>
           );
@@ -625,25 +628,17 @@
              if(!newDateVal || !dateReasonVal) return alert("請填寫新日期與修改理由！");
              const dateStr = new Date().toLocaleDateString('zh-TW');
              const prefillNote = `<br><br><p><b><span style="color:#e11d48">[${dateStr}] 🗓️ 老師已將「預估抵達下個階段的日期」修改為：${formatDate(newDateVal)}。</span></b></p><p>老師說明：${dateReasonVal}</p>`;
-             const student = students.find(s => s.id === project.studentId);
              
              const updated = { ...project, nextStageDate: newDateVal, notes: (project.notes || '') + prefillNote, hasUnreadMemo: true };
              setProjects(projects.map(p => p.id === project.id ? updated : p));
              syncToBackend('updateProject', updated);
              
-             syncToBackend('sendDateChangeEmail', { 
-                 studentEmail: student?.email, 
-                 studentName: student?.name,
-                 title: project.title, 
-                 oldDate: formatDate(project.nextStageDate) || '未設定', 
-                 newDate: formatDate(newDateVal), 
-                 reason: dateReasonVal 
-             });
+             // 💡 已經移除通知學生寄信功能
              
              setEditingDateProjectId(null);
              setNewDateVal('');
              setDateReasonVal('');
-             alert("✅ 日期已成功修改，並已寫入備忘錄且通知學生！");
+             alert("✅ 日期已成功修改，並已寫入備忘錄！");
           };
 
           const handleTerminateProject = (project) => {
@@ -1423,8 +1418,9 @@
                   if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !isStatusPending(p.pendingStatus)) {
                       const daysLeft = calculateDaysLeft(p.nextStageDate);
                       if (daysLeft !== null && daysLeft < 0) {
-                          syncToBackend('sendOverdueEmail', { projectId: p.id, title: p.title, nextStageDate: formatDate(p.nextStageDate), studentEmail: student.email });
-                          const updated = {...p, overdueEmailSent: true};
+                          // 💡 已經移除逾期自動寄信功能
+                          
+                          const updated = {...p, overdueEmailSent: true}; // 依然設定此標記以避免迴圈
                           setProjects(prev => prev.map(proj => proj.id === p.id ? updated : proj));
                       }
                   }
@@ -1703,7 +1699,11 @@
           return (
             <div className="min-h-screen flex flex-col z-10">
               <header className="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex justify-between items-center">
-                  <h1 className="text-2xl font-black text-indigo-900 flex items-center"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS</h1>
+                  <h1 className="text-2xl font-black text-indigo-900 flex items-center">
+                      <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS
+                      {/* 🌟 頂部機密版權聲明 */}
+                      <span className="hidden lg:inline-block ml-4 text-[10px] bg-rose-50 text-rose-600 px-3 py-1 rounded-lg font-black tracking-widest border border-rose-100">(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</span>
+                  </h1>
                   
                   <div className="flex items-center gap-4">
                       <div className="hidden sm:flex items-center bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
@@ -1715,14 +1715,13 @@
                           <span className="font-bold text-indigo-900 text-sm">{currentUser.name}</span>
                           <span className="text-xs text-indigo-500 ml-2 font-black bg-indigo-100 px-2 py-0.5 rounded-md">{currentUser.role === 'teacher' ? '列車長' : '乘客'}</span>
                       </div>
-                      {/* 🌟 登出時順便呼叫 window.changeBackground() 變換背景 */}
                       <button onClick={() => { setCurrentUser(null); if(window.changeBackground) window.changeBackground(); }} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-rose-100 hover:text-rose-600 transition shadow-sm">
                           <i className="fa-solid fa-right-from-bracket mr-1"></i> 登出
                       </button>
                   </div>
               </header>
 
-              {/* 🌟 補回跑馬燈動畫顯示區域 */}
+              {/* 🌟 跑馬燈動畫顯示區域 */}
               {marqueeText && (
                   <div className="bg-indigo-600 text-white text-sm font-bold py-2 overflow-hidden shadow-inner flex relative z-30">
                        <div className="px-4 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap">
@@ -1739,8 +1738,13 @@
                   <StudentWorkspace student={currentUser.studentData} students={students} setStudents={setStudents} projects={projects} setProjects={setProjects} conferences={conferences} announcements={announcements} usefulLinks={usefulLinks} />
                 }
               </main>
+              
+              {/* 🌟 頁尾機密版權聲明 */}
+              <footer className="text-center py-6 text-sm font-black text-slate-500/70 z-10 relative mt-auto">
+                 <p>(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</p>
+              </footer>
 
-              {/* 🌟 跑馬燈編輯視窗 Modal */}
+              {/* 跑馬燈編輯視窗 Modal */}
               {isMarqueeModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
