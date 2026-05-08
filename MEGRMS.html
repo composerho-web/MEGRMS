@@ -139,7 +139,6 @@
           });
         };
 
-        // 🌟 修正天數計算公式：從 1000 * 60000 * 60 * 24 改為 1000 * 60 * 60 * 24
         const calculateDaysLeft = (targetDate) => {
             if (!targetDate) return null;
             const today = new Date(); today.setHours(0,0,0,0);
@@ -474,6 +473,10 @@
 
           // 🌟 動態牆過濾狀態
           const [activeFilter, setActiveFilter] = useState(null);
+
+          // 🌟 學生專屬指導註記放大編輯狀態
+          const [editingNoteStudentId, setEditingNoteStudentId] = useState(null);
+          const [tempStudentNote, setTempStudentNote] = useState("");
 
           const pendingApprovals = projects.filter(p => p.pendingStatus !== null);
           const stagnantProjects = projects.filter(p => p.status.includes("概念發想") && p.pendingStatus === null);
@@ -818,7 +821,16 @@
 
                           <div className="mt-auto pt-2 bg-yellow-50 p-3 rounded-2xl border-2 border-yellow-200">
                             <label className="text-xs font-black text-yellow-800 mb-2 block"><i className="fa-solid fa-thumbtack mr-1"></i>指導註記 / 刪除紀錄</label>
-                            <textarea className="w-full text-sm p-2 border-2 rounded-xl bg-white focus:outline-none focus:border-yellow-400 resize-none font-medium text-slate-700 shadow-inner" rows="2" placeholder="紀錄重點或原因..." value={student.notes || ""} onChange={(e) => setStudents(students.map(s => s.id === student.id ? { ...s, notes: e.target.value } : s))} onBlur={() => syncToBackend('updateStudent', students.find(s => s.id === student.id))}></textarea>
+                            <div 
+                               onClick={() => { setEditingNoteStudentId(student.id); setTempStudentNote(student.notes || ""); }}
+                               className="w-full text-sm p-2 border-2 border-transparent rounded-xl bg-white cursor-pointer hover:border-yellow-400 transition-colors font-medium text-slate-700 shadow-inner truncate"
+                               title="點擊放大編輯"
+                            >
+                               {(() => {
+                                   const lines = (student.notes || "").split('\n').filter(l => l.trim() !== '');
+                                   return lines.length > 0 ? lines[lines.length - 1] : <span className="text-slate-400">點擊新增註記...</span>;
+                               })()}
+                            </div>
                           </div>
                         </div>
                       </Card>
@@ -826,6 +838,35 @@
                   })}
                 </div>
               </div>
+
+              {/* 🌟 編輯指導註記 Modal */}
+              {editingNoteStudentId && (
+                  <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
+                      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 p-5 text-white flex justify-between items-center">
+                              <h3 className="font-black text-xl"><i className="fa-solid fa-thumbtack mr-3"></i> 編輯 {students.find(s=>s.id === editingNoteStudentId)?.name} 的指導註記</h3>
+                              <button onClick={() => setEditingNoteStudentId(null)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                          </div>
+                          <div className="p-6 bg-slate-50 flex flex-col h-[40vh]">
+                              <textarea 
+                                  className="w-full h-full p-4 border-2 rounded-xl bg-white focus:outline-none focus:border-yellow-400 resize-none font-medium text-slate-700 shadow-inner leading-relaxed" 
+                                  placeholder="在此輸入指導紀錄、刪除原因或其他重點..." 
+                                  value={tempStudentNote} 
+                                  onChange={(e) => setTempStudentNote(e.target.value)}
+                              ></textarea>
+                              <div className="mt-6 flex justify-end gap-3 shrink-0">
+                                  <button onClick={() => setEditingNoteStudentId(null)} className="px-5 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl">取消</button>
+                                  <button onClick={() => {
+                                      const updatedStudent = { ...students.find(s => s.id === editingNoteStudentId), notes: tempStudentNote };
+                                      setStudents(students.map(s => s.id === editingNoteStudentId ? updatedStudent : s));
+                                      syncToBackend('updateStudent', updatedStudent);
+                                      setEditingNoteStudentId(null);
+                                  }} className="px-6 py-2 bg-orange-500 text-white font-black rounded-xl hover:bg-orange-600 shadow-md active:scale-95">儲存變更</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
 
               {/* 🌟 新增乘客 Modal */}
               {isAddStudentOpen && (
