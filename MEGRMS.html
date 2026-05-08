@@ -48,7 +48,8 @@
         ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; border: 2px solid #f1f5f9; }
         ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
-        .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; overflow: hidden; background: linear-gradient(135deg, #e0e7ff 0%, #fdf4ff 50%, #e0f2fe 100%); }
+        .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2; overflow: hidden; background-image: url('https://i.ibb.co/93ryGND0/Gemini-Generated-Image-m3tar8m3tar8m3ta.png'); background-size: cover; background-position: center; background-attachment: fixed; }
+        .bg-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(8px); }
         .cloud { position: absolute; font-size: 4rem; opacity: 0.4; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); }
         .cloud-1 { top: 10%; animation: float-cloud 40s linear infinite; }
         .cloud-2 { top: 30%; font-size: 5rem; animation: float-cloud 55s linear infinite 15s; }
@@ -57,7 +58,9 @@
     </style>
 </head>
 <body class="text-gray-800">
-    <div class="bg-shapes">
+    <div class="bg-shapes"></div>
+    <div class="bg-overlay"></div>
+    <div class="fixed top-0 left-0 w-full h-full z-[-1] overflow-hidden pointer-events-none">
         <div class="cloud cloud-1">☁️</div><div class="cloud cloud-2">⛅</div><div class="cloud cloud-3">☁️</div>
         <div class="bg-train">🚂🚋🚋🚋🚋🚋</div>
     </div>
@@ -392,7 +395,7 @@
                     <div className="p-8 relative z-10">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
                             <h2 className="text-2xl font-black flex items-center text-white drop-shadow-md">
-                                <i className="fa-solid fa-trophy text-yellow-300 mr-3 text-3xl animate-bounce-soft"></i> 榮譽榜與動態牆
+                                <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain drop-shadow-md animate-bounce-soft" /> 列車專案動態牆
                             </h2>
                             {activeFilter && (
                                 <button onClick={() => onFilterClick && onFilterClick(null)} className="mt-3 sm:mt-0 px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white font-bold rounded-full transition text-sm flex items-center w-fit border border-white/40">
@@ -437,7 +440,7 @@
             <div className="min-h-screen bg-shapes flex items-center justify-center p-4">
               <div className="bg-white/90 backdrop-blur-xl max-w-md w-full rounded-[2.5rem] shadow-[0_20px_60px_rgba(0,0,0,0.1)] overflow-hidden animate-modal-pop border-[6px] border-white relative z-10">
                 <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-10 text-center relative overflow-hidden">
-                  <i className="fa-solid fa-train-subway text-white text-6xl mb-4 drop-shadow-lg animate-bounce-soft"></i>
+                  <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-4 drop-shadow-2xl animate-bounce-soft object-contain" />
                   <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">MEG-RMS</h1>
                   <p className="bg-white/20 inline-block px-4 py-1.5 rounded-full text-indigo-50 text-sm mt-3 font-bold backdrop-blur-sm border border-white/30">新自強3000 研究進度管理系統</p>
                 </div>
@@ -1208,7 +1211,7 @@
         };
 
         const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
-          if (!student) return <div className="text-center py-20"><i className="fa-solid fa-train-subway text-6xl text-indigo-400 mb-6 animate-bounce-soft"></i></div>;
+          if (!student) return <div className="text-center py-20"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-6 animate-bounce-soft object-contain opacity-60 grayscale" /></div>;
 
           // 🌟 學生端也分離活躍與下車專案
           const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
@@ -1402,7 +1405,7 @@
               }).catch(err => setIsLoading(false));
           }, []);
 
-          if (isLoading) return <div className="min-h-screen bg-shapes flex items-center justify-center flex-col z-10"><i className="fa-solid fa-train-subway text-indigo-500 text-6xl animate-bounce-soft mb-6"></i><h2 className="text-2xl font-black text-indigo-900 bg-white/80 px-6 py-2 rounded-full">列車啟動中...</h2></div>;
+          if (isLoading) return <div className="min-h-screen flex items-center justify-center flex-col z-10"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 animate-bounce-soft mb-6 object-contain drop-shadow-2xl" /><h2 className="text-2xl font-black text-indigo-900 bg-white/80 px-6 py-2 rounded-full shadow-sm">列車啟動中...</h2></div>;
 
           const handleLogin = (email, name, picture) => {
             const userEmail = email.toLowerCase().trim();
@@ -1418,7 +1421,7 @@
           return (
             <div className="min-h-screen flex flex-col z-10">
               <header className="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex justify-between items-center">
-                  <h1 className="text-2xl font-black text-indigo-900"><i className="fa-solid fa-train-subway text-indigo-500 mr-2"></i> MEG-RMS</h1>
+                  <h1 className="text-2xl font-black text-indigo-900 flex items-center"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS</h1>
                   
                   <div className="flex items-center gap-4">
                       <div className="hidden sm:flex items-center bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
