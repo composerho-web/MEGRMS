@@ -196,6 +196,10 @@
             return Math.round((today - target) / (1000 * 60 * 60 * 24));
         };
 
+        const isStatusPending = (val) => {
+            return val !== undefined && val !== null && String(val).trim() !== "" && String(val).toLowerCase() !== "null";
+        };
+
         const StatusBadge = ({ status }) => {
           let colors = "bg-gray-100 text-gray-600 border-gray-200";
           if (status.includes("發想")) colors = "bg-orange-100 text-orange-700 border-orange-300 shadow-orange-100";
@@ -528,11 +532,11 @@
           const activeProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)');
           const terminatedProjects = projects.filter(p => p.status === '🛑 專案已終止 (下車)');
 
-          const pendingApprovals = activeProjects.filter(p => p.pendingStatus !== null);
+          const pendingApprovals = activeProjects.filter(p => isStatusPending(p.pendingStatus));
           
           const getAlerts = (p) => {
               let reasons = [];
-              if (p.pendingStatus !== null) return []; 
+              if (isStatusPending(p.pendingStatus)) return []; 
               
               const daysToNext = calculateDaysLeft(p.nextStageDate);
               if (daysToNext !== null && daysToNext < 0) {
@@ -1416,7 +1420,7 @@
 
           useEffect(() => {
               myActiveProjects.forEach(p => {
-                  if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !p.pendingStatus) {
+                  if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !isStatusPending(p.pendingStatus)) {
                       const daysLeft = calculateDaysLeft(p.nextStageDate);
                       if (daysLeft !== null && daysLeft < 0) {
                           syncToBackend('sendOverdueEmail', { projectId: p.id, title: p.title, nextStageDate: formatDate(p.nextStageDate), studentEmail: student.email });
@@ -1497,7 +1501,7 @@
                         </div>
                     )}
 
-                    {project.pendingStatus && (
+                    {isStatusPending(project.pendingStatus) && (
                       <div className="absolute -top-4 -right-4 bg-orange-500 text-white text-sm font-black px-4 py-2 rounded-2xl shadow-lg flex items-center animate-bounce border-4 border-white z-50">
                         <i className="fa-solid fa-hourglass-half mr-2 fa-spin-pulse"></i> 老師審核中
                       </div>
@@ -1523,7 +1527,7 @@
                         <label className="text-base font-black text-slate-700 block mb-3 flex items-center"><i className="fa-solid fa-bolt mr-2 text-yellow-500"></i> 更新進度狀態：</label>
                         <div className="flex flex-col gap-4">
                           {(() => {
-                              const isPending = project.pendingStatus && project.pendingStatus.trim() !== "";
+                              const isPending = isStatusPending(project.pendingStatus);
                               const displayStatus = isPending ? project.pendingStatus : (draftStatuses[project.id] || project.status);
                               return (
                                   <>
