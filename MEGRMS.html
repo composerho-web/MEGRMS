@@ -49,7 +49,7 @@
         ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
         .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2; overflow: hidden; background-image: url('https://i.ibb.co/93ryGND0/Gemini-Generated-Image-m3tar8m3tar8m3ta.png'); background-size: cover; background-position: center; background-attachment: fixed; }
-        .bg-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(8px); }
+        
         .cloud { position: absolute; font-size: 4rem; opacity: 0.4; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); }
         .cloud-1 { top: 10%; animation: float-cloud 40s linear infinite; }
         .cloud-2 { top: 30%; font-size: 5rem; animation: float-cloud 55s linear infinite 15s; }
@@ -58,8 +58,12 @@
     </style>
 </head>
 <body class="text-gray-800">
+    <!-- 底層背景圖 -->
     <div class="bg-shapes"></div>
-    <div class="bg-overlay"></div>
+    
+    <!-- 動態背景遮罩 (交由 React 控制清晰度) -->
+    <div id="bg-overlay" class="fixed top-0 left-0 w-full h-full z-[-1] bg-transparent backdrop-blur-none transition-all duration-1000"></div>
+    
     <div class="fixed top-0 left-0 w-full h-full z-[-1] overflow-hidden pointer-events-none">
         <div class="cloud cloud-1">☁️</div><div class="cloud cloud-2">⛅</div><div class="cloud cloud-3">☁️</div>
         <div class="bg-train">🚂🚋🚋🚋🚋🚋</div>
@@ -314,7 +318,6 @@
             );
         };
 
-        // ... (保持 AnnouncementsBoard, ConferencesBoard, UsefulLinksBoard, AchievementDashboard 不變)
         const AnnouncementsBoard = ({ announcements }) => (
           <Card className="flex flex-col h-full border-t-[6px] border-t-sky-400 overflow-hidden">
              <div className="p-5 border-b border-sky-50 bg-gradient-to-r from-sky-50 to-white flex justify-between items-center">
@@ -745,6 +748,10 @@
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                               {filteredProjectsToShow.map(project => {
                                   const student = students.find(s => s.id === project.studentId);
+                                  
+                                  // 🌟 判斷是否有新的備忘錄
+                                  const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
+
                                   return (
                                       <div key={project.id} className="bg-white border-2 border-indigo-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all flex flex-col">
                                           <div className="flex justify-between items-start mb-2">
@@ -754,9 +761,14 @@
                                           <h4 className="font-black text-slate-800 text-lg mb-3 leading-tight">{project.title}</h4>
                                           <div className="mb-4 mt-auto"><StatusBadge status={project.status} /></div>
                                           
-                                          <div className="flex justify-end border-t-2 border-slate-50 pt-3">
-                                              <button onClick={() => setManageStudentProjectsId(project.studentId)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-black rounded-xl text-sm hover:bg-indigo-100 active:scale-95 transition flex items-center">
-                                                  <i className="fa-solid fa-bars-progress mr-2"></i>管理此專案
+                                          {/* 🌟 補回遺失的「備忘錄」按鈕 */}
+                                          <div className="flex justify-end gap-2 border-t-2 border-slate-50 pt-3">
+                                              <button onClick={() => setEditingProjectNotes(project)} className={`px-4 py-2 font-black rounded-xl text-sm active:scale-95 transition flex items-center shadow-sm ${isUnread ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 animate-pulse' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
+                                                  <i className={`fa-solid fa-book-sparkles mr-2 ${isUnread ? 'text-rose-500' : ''}`}></i>備忘錄
+                                                  {isUnread && <span className="ml-2 w-2 h-2 rounded-full bg-rose-500"></span>}
+                                              </button>
+                                              <button onClick={() => setManageStudentProjectsId(project.studentId)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-black rounded-xl text-sm hover:bg-indigo-100 active:scale-95 transition flex items-center shadow-sm">
+                                                  <i className="fa-solid fa-bars-progress mr-2"></i>管理專案
                                               </button>
                                           </div>
                                       </div>
@@ -849,7 +861,7 @@
                 </Card>
               </div>
 
-              {/* 🌟 修改排版：乘客名單 */}
+              {/* 🌟 乘客名單 */}
               <div className="pt-8">
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
                       <h3 className="text-2xl font-black text-indigo-900"><i className="fa-solid fa-users-viewfinder text-indigo-500 mr-3"></i> 乘客名單與指導紀錄</h3>
@@ -868,7 +880,6 @@
                       <Card key={student.id} className="border-t-[6px] border-t-indigo-400 relative flex flex-col h-full overflow-visible">
                         <div className="p-5 flex-grow flex flex-col">
                           
-                          {/* 優化標題與按鈕的 Flex 排版，防止重疊 */}
                           <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-3 border-b-2 border-indigo-50 pb-3">
                               <div className="flex items-center flex-wrap gap-2">
                                   <span className="font-black text-xl text-slate-800">{student.name}</span>
@@ -905,7 +916,6 @@
                               </button>
                               <div className="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100 flex flex-col items-center justify-center text-center overflow-hidden">
                                   <span className="text-xs font-bold text-slate-500 mb-1">最後更新</span>
-                                  {/* 確保完整顯示正確日期 */}
                                   <span className="text-sm font-black text-slate-700 w-full px-1">
                                       {latestUpdate && !isNaN(latestUpdate.getTime()) ? formatDate(latestUpdate) : '無資料'}
                                   </span>
@@ -932,7 +942,7 @@
                 </div>
               </div>
 
-              {/* ... (其餘 Modal 保持不變) */}
+              {/* Modal 設定區 */}
               
               {editingNoteStudentId && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
@@ -1503,6 +1513,19 @@
               setIsMarqueeModalOpen(true);
           };
 
+          // 🌟 動態控制背景清晰度
+          useEffect(() => {
+              const overlay = document.getElementById('bg-overlay');
+              if (overlay) {
+                  // 如果已經登入成功（不是未授權用戶），就把背景微微調模糊；否則就維持全清晰
+                  if (currentUser && currentUser.role !== 'unauthorized') {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-white/40 backdrop-blur-[4px]";
+                  } else {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-transparent backdrop-blur-none";
+                  }
+              }
+          }, [currentUser]);
+
           useEffect(() => {
             let isMounted = true;
             
@@ -1583,7 +1606,7 @@
                 }
               </main>
 
-              {/* 🌟 補回跑馬燈編輯視窗 Modal */}
+              {/* 🌟 跑馬燈編輯視窗 Modal */}
               {isMarqueeModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
