@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <!-- 🌟 加入灑花特效所需的函式庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
@@ -48,7 +51,6 @@
         ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; border: 2px solid #f1f5f9; }
         ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
-        /* 背景移除了原本寫死的圖片，交由 JS 動態隨機指派，並加上柔和過場動畫 */
         .bg-shapes { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2; overflow: hidden; background-size: cover; background-position: center; background-attachment: fixed; transition: background-image 1.5s ease-in-out; }
         
         .cloud { position: absolute; font-size: 4rem; opacity: 0.4; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); }
@@ -62,7 +64,6 @@
     <!-- 底層背景圖 -->
     <div id="main-bg" class="bg-shapes"></div>
     
-    <!-- 隨機背景腳本 -->
     <script>
         const bgImages = [
             'https://i.ibb.co/93ryGND0/Gemini-Generated-Image-m3tar8m3tar8m3ta.png', 
@@ -70,17 +71,13 @@
             'https://i.ibb.co/pBSmcN9g/9c91dd69-35eb-4b22-89a8-2d5d913805bc.jpg'     
         ];
         
-        // 將換背景功能掛載到 window，讓 React 登出時也能呼叫
         window.changeBackground = function() {
             const randomBg = bgImages[Math.floor(Math.random() * bgImages.length)];
             document.getElementById('main-bg').style.backgroundImage = `url('${randomBg}')`;
         };
-
-        // 頁面初始載入時，立刻抽換一次背景
         window.changeBackground();
     </script>
     
-    <!-- 動態背景遮罩 (交由 React 控制清晰度) -->
     <div id="bg-overlay" class="fixed top-0 left-0 w-full h-full z-[-1] bg-transparent backdrop-blur-none transition-all duration-1000"></div>
     
     <div class="fixed top-0 left-0 w-full h-full z-[-1] overflow-hidden pointer-events-none">
@@ -88,7 +85,6 @@
         <div class="bg-train">🚂🚋🚋🚋🚋🚋</div>
     </div>
 
-    <!-- 修正 Stacking Context，避免背後 blur 影響主畫面 -->
     <div id="root" class="relative z-10"></div>
 
     <script type="text/babel">
@@ -104,21 +100,15 @@
         // ⚠️ 請替換為您自己最新部署的 API URL
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
 
-        // 🌟 終極無敵強化的日期裁切函式：保證過濾掉 T16:00:00.000Z
         const formatDate = (dateVal) => {
             if (!dateVal) return '';
             try {
-                // 如果是字串，直接暴力拆解 'T' 或空白
                 if (typeof dateVal === 'string') {
                     const cleanStr = dateVal.split('T')[0].split(' ')[0];
                     if (cleanStr.includes('-') || cleanStr.includes('/')) return cleanStr;
                 }
-                
-                // 強制轉換為日期物件
                 const d = new Date(dateVal);
-                if (isNaN(d.getTime())) return String(dateVal); // 如果轉換失敗，回傳原始字串
-                
-                // 手動拼接格式，確保不受時區影響
+                if (isNaN(d.getTime())) return String(dateVal); 
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const day = String(d.getDate()).padStart(2, '0');
@@ -460,11 +450,9 @@
 
         const LoginScreen = ({ onLoginSuccess }) => {
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
-          // 🌟 加入顯示開發登入區塊的狀態
           const [showDevLogin, setShowDevLogin] = useState(false);
 
           useEffect(() => {
-            // 🌟 彩蛋功能：監聽鍵盤輸入 hohoho
             let buffer = '';
             const handleKeyDown = (e) => {
                 buffer += e.key.toLowerCase();
@@ -473,7 +461,7 @@
                 }
                 if (buffer === 'hohoho') {
                     setShowDevLogin(true);
-                    buffer = ''; // 歸零
+                    buffer = ''; 
                 }
             };
             window.addEventListener('keydown', handleKeyDown);
@@ -507,7 +495,6 @@
                   <h2 className="text-2xl font-black text-indigo-900 mb-2">乘客請驗票登入 🎫</h2>
                   <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4"><div id="google-signin-button"></div></div>
                   
-                  {/* 🌟 隱藏的開發測試區塊，只在觸發彩蛋時顯示 */}
                   {showDevLogin && (
                       <div className="w-full animate-fade-in mt-2">
                           <div className="w-full flex items-center justify-center mb-4 opacity-50">
@@ -544,8 +531,8 @@
           const [pendingApprovalFlow, setPendingApprovalFlow] = useState(null);
 
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-          const [newStudent, setNewStudent] = useState({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
-          const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '' });
+          // 🌟 加入 initialDescription 欄位
+          const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
           
           const [editingDateProjectId, setEditingDateProjectId] = useState(null);
           const [newDateVal, setNewDateVal] = useState('');
@@ -593,6 +580,10 @@
               if(!confirm(`✅ 確定要核准【${project.title}】的進度為「${project.pendingStatus}」嗎？\n(系統將自動寫入備忘錄並變更狀態)`)) return;
               
               const dateStr = new Date().toLocaleDateString('zh-TW');
+              
+              // 🌟 檢查是否進入灑花狀態 (接受論文)
+              const isAccepted = project.pendingStatus.includes('已被接受');
+
               const updated = { 
                   ...project, 
                   status: project.pendingStatus, 
@@ -601,7 +592,8 @@
                   lastUpdate: new Date().toISOString().split('T')[0], 
                   hasUnreadMemo: true, 
                   overdueEmailSent: false, 
-                  lastPokeDate: null 
+                  lastPokeDate: null,
+                  ...(isAccepted && !project.acceptedDate ? { acceptedDate: new Date().toISOString() } : {}) // 記錄接受日期
               };
               updated.notes = (project.notes || '') + `<br><br><p><b><span style="color:#059669">[${dateStr}] ✅ 老師已核准進度變更為：「${project.pendingStatus}」。</span></b></p>`;
               
@@ -699,7 +691,7 @@
               if(!confirm(`⚠️ 嚴重警告：確定要永久刪除【${project.title}】嗎？\n此動作將無法復原！`)) return;
               const updated = { ...project, isDeleted: true };
               setProjects(projects.filter(p => p.id !== project.id)); 
-              syncToBackend('deleteProject', updated); // 確保後端接到正確的 action
+              syncToBackend('deleteProject', updated); 
           };
 
           const handleAddStudent = () => {
@@ -714,17 +706,27 @@
 
           const handleAddProject = () => {
               if (!newProjectForStudent.title) return alert("專案名稱為必填！");
+              // 🌟 檢查初步說明字數限制
+              if (!newProjectForStudent.initialDescription || newProjectForStudent.initialDescription.trim().length < 10) {
+                  return alert("初步說明至少需要填寫 10 個字喔！");
+              }
+
               const student = students.find(s => s.id === manageStudentProjectsId);
+              
+              // 🌟 將初步說明寫入初始備忘錄
+              const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已由列車長建立。</b><br>初步說明：${newProjectForStudent.initialDescription}</p>`;
+
               const p = { 
                   id: 'p' + Date.now(), studentId: manageStudentProjectsId, studentName: student.name, 
                   title: newProjectForStudent.title, status: newProjectForStudent.status, mentors: newProjectForStudent.mentors,
-                  lastUpdate: new Date().toISOString().split('T')[0], pendingStatus: null 
+                  lastUpdate: new Date().toISOString().split('T')[0], pendingStatus: null,
+                  notes: initialNote // 寫入
               };
               const updated = [...projects, p];
               setProjects(updated);
               syncToBackend('addProject', p);
               setIsAddProjectModalOpen(false);
-              setNewProjectForStudent({ title: '', status: STATUSES[0], mentors: '' });
+              setNewProjectForStudent({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
           };
 
           const handlePoke = (projectId) => {
@@ -1122,6 +1124,11 @@
                                   <label className="text-sm font-bold text-slate-600 block mb-1">指導學長姐 / 專家 (選填)</label>
                                   <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProjectForStudent.mentors} onChange={(e) => setNewProjectForStudent({...newProjectForStudent, mentors: e.target.value})} placeholder="逗號分隔" />
                               </div>
+                              {/* 🌟 老師端新增專案：初步說明 */}
+                              <div>
+                                  <label className="text-sm font-bold text-slate-600 block mb-1">初步說明 (至少10字) *</label>
+                                  <textarea className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-medium resize-none focus:border-indigo-400" rows="3" value={newProjectForStudent.initialDescription} onChange={(e) => setNewProjectForStudent({...newProjectForStudent, initialDescription: e.target.value})} placeholder="請輸入至少10個字的初步說明，這將作為最初始的備忘錄資料..."></textarea>
+                              </div>
                               <div className="flex justify-end gap-3 mt-6">
                                   <button onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
                                   <button onClick={handleAddProject} className="px-5 py-2.5 bg-sky-600 text-white font-black rounded-xl hover:bg-sky-700 shadow-md active:scale-95">確認新增</button>
@@ -1368,7 +1375,14 @@
                                                   <div>
                                                       <label className="text-xs font-bold text-slate-500 mb-1 block">強制更改狀態 (無須審核)</label>
                                                       <select className="w-full p-2 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold text-sm" value={p.status} onChange={(e) => {
-                                                          const updated = {...p, status: e.target.value, pendingStatus: null, lastUpdate: new Date().toISOString().split('T')[0]};
+                                                          const newStatus = e.target.value;
+                                                          // 🌟 檢查是否進入灑花狀態 (接受論文)
+                                                          const isAccepted = newStatus.includes('已被接受');
+                                                          
+                                                          const updated = {
+                                                              ...p, status: newStatus, pendingStatus: null, lastUpdate: new Date().toISOString().split('T')[0],
+                                                              ...(isAccepted && !p.acceptedDate ? { acceptedDate: new Date().toISOString() } : {})
+                                                          };
                                                           setProjects(projects.map(proj => proj.id === p.id ? updated : proj));
                                                           syncToBackend('updateProject', updated);
                                                       }}>
@@ -1415,10 +1429,20 @@
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
           
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-          const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0] });
+          // 🌟 加入 initialDescription 欄位
+          const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0], initialDescription: '' });
 
           const handleAddProjectSubmit = () => {
               if(!newProject.title) return alert("請輸入專案名稱！");
+              
+              // 🌟 檢查初步說明字數限制
+              if (!newProject.initialDescription || newProject.initialDescription.trim().length < 10) {
+                  return alert("初步說明至少需要填寫 10 個字喔！");
+              }
+
+              // 🌟 將初步說明寫入初始備忘錄
+              const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b><br>初步說明：${newProject.initialDescription}</p>`;
+
               const p = {
                   id: 'p' + Date.now(),
                   studentId: student.id,
@@ -1427,13 +1451,13 @@
                   status: newProject.status,
                   lastUpdate: new Date().toISOString().split('T')[0],
                   pendingStatus: null,
-                  notes: `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b></p>`
+                  notes: initialNote // 寫入
               };
               const updated = [...projects, p];
               setProjects(updated);
               syncToBackend('addProject', p);
               setIsAddProjectModalOpen(false);
-              setNewProject({ title: '', status: STATUSES[0] });
+              setNewProject({ title: '', status: STATUSES[0], initialDescription: '' });
           };
 
           useEffect(() => {
@@ -1441,9 +1465,7 @@
                   if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !isStatusPending(p.pendingStatus)) {
                       const daysLeft = calculateDaysLeft(p.nextStageDate);
                       if (daysLeft !== null && daysLeft < 0) {
-                          // 💡 已經移除逾期自動寄信功能
-                          
-                          const updated = {...p, overdueEmailSent: true}; // 依然設定此標記以避免迴圈
+                          const updated = {...p, overdueEmailSent: true};
                           setProjects(prev => prev.map(proj => proj.id === p.id ? updated : proj));
                       }
                   }
@@ -1501,9 +1523,7 @@
                           <i className="fa-brands fa-facebook-messenger mr-2 text-lg"></i> 私訊指導教授
                       </button>
                   )}
-                  <a href="mailto:composerho@gmail.com" className="px-5 py-2.5 bg-blue-100 text-blue-700 font-black rounded-xl hover:bg-blue-200 active:scale-95 transition flex items-center shadow-sm">
-                      <i className="fa-solid fa-envelope mr-2"></i> Email 聯繫
-                  </a>
+                  {/* 🌟 已經將原先的 Email 聯絡按鈕移除 */}
                 </div>
               </div>
 
@@ -1591,7 +1611,6 @@
                   </Card>
                 )})}
                 
-                {/* 🌟 學生專屬的發想新專案按鈕 */}
                 <Card className="border-dashed border-4 border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-500 hover:bg-indigo-100 hover:border-indigo-500 hover:text-indigo-700 transition cursor-pointer group min-h-[350px] mt-6 shadow-sm" onClick={() => setIsAddProjectModalOpen(true)}>
                     <i className="fa-solid fa-circle-plus text-6xl mb-4 group-hover:scale-110 group-hover:rotate-90 transition-all duration-300"></i>
                     <span className="font-black text-2xl">發想新專案</span>
@@ -1634,6 +1653,11 @@
                                       {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
                               </div>
+                              {/* 🌟 學生端新增專案：初步說明 */}
+                              <div>
+                                  <label className="text-sm font-bold text-slate-600 block mb-1">初步說明 (至少10字) *</label>
+                                  <textarea className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-medium resize-none focus:border-indigo-400" rows="3" value={newProject.initialDescription} onChange={(e) => setNewProject({...newProject, initialDescription: e.target.value})} placeholder="請輸入至少10個字的初步說明，這將作為最初始的備忘錄資料..."></textarea>
+                              </div>
                               <div className="flex justify-end gap-3 mt-6">
                                   <button onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
                                   <button onClick={handleAddProjectSubmit} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">建立專案</button>
@@ -1659,13 +1683,16 @@
 
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
           const [tempMarquee, setTempMarquee] = useState("");
+          
+          // 🌟 灑花特效相關狀態
+          const [showCelebration, setShowCelebration] = useState(false);
+          const [hasCelebrated, setHasCelebrated] = useState(false);
 
           const openMarqueeManager = () => {
               setTempMarquee(marqueeText);
               setIsMarqueeModalOpen(true);
           };
 
-          // 🌟 動態控制背景清晰度
           useEffect(() => {
               const overlay = document.getElementById('bg-overlay');
               if (overlay) {
@@ -1676,6 +1703,48 @@
                   }
               }
           }, [currentUser]);
+
+          // 🌟 檢查並觸發灑花特效
+          useEffect(() => {
+              if (currentUser && currentUser.role !== 'unauthorized' && projects.length > 0 && !hasCelebrated) {
+                  // 找出與此登入者相關的專案
+                  const relevantProjects = currentUser.role === 'teacher' ? projects : projects.filter(p => p.studentId === currentUser.studentData.id);
+                  
+                  // 檢查是否有專案在「3天內」首次進入接受狀態
+                  const hasRecentAcceptance = relevantProjects.some(p => {
+                      if (!p.acceptedDate) return false;
+                      if (!p.status.includes('已被接受')) return false; // 必須現在還是接受狀態
+                      
+                      const diffDays = (new Date() - new Date(p.acceptedDate)) / (1000 * 60 * 60 * 24);
+                      return diffDays >= 0 && diffDays <= 3; // 3 天內的狂歡期
+                  });
+
+                  if (hasRecentAcceptance) {
+                      setHasCelebrated(true); // 避免重新整理/狀態變更時重複播放
+                      setShowCelebration(true);
+                      
+                      // 執行灑花動畫 (持續約 4 秒)
+                      const duration = 4000;
+                      const end = Date.now() + duration;
+
+                      const frame = () => {
+                          if (window.confetti) {
+                              window.confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
+                              window.confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
+                          }
+                          if (Date.now() < end) {
+                              requestAnimationFrame(frame);
+                          }
+                      };
+                      frame();
+
+                      // 5 秒後自動隱藏特效畫面
+                      setTimeout(() => {
+                          setShowCelebration(false);
+                      }, 5000);
+                  }
+              }
+          }, [currentUser, projects, hasCelebrated]);
 
           useEffect(() => {
             let isMounted = true;
@@ -1719,10 +1788,18 @@
 
           return (
             <div className="min-h-screen flex flex-col z-10">
+              {/* 🌟 論文接受的慶祝遮罩 */}
+              {showCelebration && (
+                  <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-[100] animate-fade-in transition-opacity duration-1000">
+                      <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 drop-shadow-[0_10px_20px_rgba(236,72,153,0.5)] animate-bounce-soft tracking-widest text-center px-4 leading-tight">
+                          🎉 恭喜新論文被接受~ 🎊
+                      </h1>
+                  </div>
+              )}
+
               <header className="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex justify-between items-center">
                   <h1 className="text-2xl font-black text-indigo-900 flex items-center">
                       <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS
-                      {/* 🌟 頂部機密版權聲明 */}
                       <span className="hidden lg:inline-block ml-4 text-[10px] bg-rose-50 text-rose-600 px-3 py-1 rounded-lg font-black tracking-widest border border-rose-100">(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</span>
                   </h1>
                   
@@ -1742,7 +1819,6 @@
                   </div>
               </header>
 
-              {/* 🌟 跑馬燈動畫顯示區域 */}
               {marqueeText && (
                   <div className="bg-indigo-600 text-white text-sm font-bold py-2 overflow-hidden shadow-inner flex relative z-30">
                        <div className="px-4 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap">
@@ -1760,12 +1836,10 @@
                 }
               </main>
               
-              {/* 🌟 頁尾機密版權聲明 */}
               <footer className="text-center py-6 text-sm font-black text-slate-500/70 z-10 relative mt-auto">
                  <p>(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</p>
               </footer>
 
-              {/* 跑馬燈編輯視窗 Modal */}
               {isMarqueeModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
