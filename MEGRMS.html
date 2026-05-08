@@ -32,7 +32,6 @@
         .animate-pulse-glow { animation: pulse-glow 2s infinite; }
         .animate-modal-pop { animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 
-        /* 備忘錄豐富編輯器樣式：將預設字體加大 (text-lg / 18px) */
         .rich-content { font-size: 1.125rem; line-height: 1.75; }
         .rich-content ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.5rem; }
         .rich-content ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 0.5rem; }
@@ -76,6 +75,19 @@
         ];
 
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwvFe7geACFOL5yRauhX8WiBqafBLJiOj7CSPB6PNgoWkVqHeIVUS-wxGQWPGuC5aFG/exec";
+
+        // 🌟 自動裁切日期格式的工具函式 (去除 T16:00:00.000Z 等)
+        const formatDate = (dateVal) => {
+            if (!dateVal) return '';
+            if (typeof dateVal === 'string') return dateVal.split('T')[0];
+            if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+                const y = dateVal.getFullYear();
+                const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+                const d = String(dateVal.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return dateVal;
+        };
 
         const extractText = (html) => {
             if(!html) return "";
@@ -127,13 +139,14 @@
           });
         };
 
+        // 🌟 修正天數計算公式：從 1000 * 60000 * 60 * 24 改為 1000 * 60 * 60 * 24
         const calculateDaysLeft = (targetDate) => {
             if (!targetDate) return null;
             const today = new Date(); today.setHours(0,0,0,0);
             const target = new Date(targetDate);
             if (isNaN(target.getTime())) return null; 
             target.setHours(0,0,0,0);
-            return Math.round((target - today) / (1000 * 60000 * 60 * 24));
+            return Math.round((target - today) / (1000 * 60 * 60 * 24));
         };
 
         const StatusBadge = ({ status }) => {
@@ -147,14 +160,12 @@
           return <span className={`px-3 py-1.5 rounded-2xl text-xs font-black shadow-sm border-2 ${colors} flex items-center w-fit`}>{status}</span>;
         };
 
-        // 解除 Card 的 overflow-hidden，避免標籤被裁切
         const Card = ({ children, className = "", onClick }) => (
           <div onClick={onClick} className={`bg-white/80 backdrop-blur-lg rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300 ${className}`}>
             {children}
           </div>
         );
 
-        // 🌟 核心組件：輕量級 Rich Text Editor (新增字體大小調整)
         const RichTextEditor = ({ initialValue, onChange, readOnly, placeholder }) => {
             const editorRef = useRef(null);
 
@@ -186,7 +197,6 @@
             return (
                 <div className="border-2 border-indigo-200 rounded-2xl overflow-hidden bg-white flex flex-col h-full shadow-inner focus-within:border-indigo-400 transition-colors">
                     <div className="bg-indigo-50 border-b-2 border-indigo-100 flex items-center p-2 gap-2 overflow-x-auto flex-wrap">
-                        {/* 字體大小選單 */}
                         <select onChange={(e) => execCmd('fontSize', e.target.value)} className="p-1 rounded border-2 border-indigo-200 text-sm font-bold text-indigo-900 bg-white outline-none cursor-pointer" title="字體大小">
                             <option value="3">正常字體</option>
                             <option value="4">加大字體</option>
@@ -220,7 +230,6 @@
             );
         };
 
-        // 🌟 專案備忘錄 Modal
         const ProjectNotesModal = ({ isOpen, onClose, project, onSave, isTeacher, markAsRead }) => {
             const [notes, setNotes] = useState("");
             
@@ -280,7 +289,6 @@
             );
         };
 
-        // 🌟 公告板
         const AnnouncementsBoard = ({ announcements }) => (
           <Card className="flex flex-col h-full border-t-[6px] border-t-sky-400 overflow-hidden">
              <div className="p-5 border-b border-sky-50 bg-gradient-to-r from-sky-50 to-white flex justify-between items-center">
@@ -292,7 +300,7 @@
                     <div key={a.id} className="bg-white border-2 border-sky-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-sky-300 transition-all group">
                        <div className="flex justify-between items-start border-b-2 border-sky-50 pb-3 mb-3">
                           <h4 className="font-black text-sky-900 text-lg group-hover:text-sky-600 transition-colors">{a.title}</h4>
-                          <span className="text-[10px] font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full whitespace-nowrap"><i className="fa-regular fa-clock mr-1"></i>{a.date}</span>
+                          <span className="text-[10px] font-bold text-sky-600 bg-sky-100 px-3 py-1 rounded-full whitespace-nowrap"><i className="fa-regular fa-clock mr-1"></i>{formatDate(a.date)}</span>
                        </div>
                        <div className="rich-content text-sm text-gray-700" dangerouslySetInnerHTML={{__html: a.content}}></div>
                     </div>
@@ -302,7 +310,6 @@
           </Card>
         );
 
-        // 🌟 研討會資訊板 (給學生看)
         const ConferencesBoard = ({ conferences }) => (
           <Card className="flex flex-col h-full border-t-[6px] border-t-teal-400 overflow-hidden">
              <div className="p-5 border-b border-teal-50 bg-gradient-to-r from-teal-50 to-white flex justify-between items-center">
@@ -317,9 +324,9 @@
                            {days !== null && days <= 14 && days >= 0 && <div className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-lg animate-pulse shadow-md">急迫!</div>}
                            <h4 className="font-black text-teal-800 text-lg mb-2">{conf.name}</h4>
                            <div className="flex flex-col gap-1 text-xs font-bold">
-                               <span className="text-slate-500">大會截稿日: {conf.submitDeadline || '未提供'}</span>
+                               <span className="text-slate-500">大會截稿日: {formatDate(conf.submitDeadline) || '未提供'}</span>
                                <span className={`px-2 py-1 rounded-md w-fit ${days < 0 ? 'bg-rose-100 text-rose-700' : 'bg-rose-50 border border-rose-200 text-rose-600'}`}>
-                                   老師死線: {conf.confirmDeadline} {days !== null ? (days < 0 ? '(已過期)' : `(剩 ${days} 天)`) : ''}
+                                   老師死線: {formatDate(conf.confirmDeadline)} {days !== null ? (days < 0 ? '(已過期)' : `(剩 ${days} 天)`) : ''}
                                </span>
                            </div>
                            {conf.url && <a href={conf.url} target="_blank" rel="noreferrer" className="mt-3 block text-center bg-teal-50 text-teal-700 p-2 rounded-xl text-sm font-bold hover:bg-teal-100 transition"><i className="fa-solid fa-link mr-1"></i> 前往官網</a>}
@@ -331,7 +338,6 @@
           </Card>
         );
 
-        // 🌟 常用連結板
         const UsefulLinksBoard = ({ links }) => (
           <Card className="flex flex-col h-full border-t-[6px] border-t-emerald-400 overflow-hidden">
              <div className="p-5 border-b border-emerald-50 bg-gradient-to-r from-emerald-50 to-white flex justify-between items-center">
@@ -352,30 +358,45 @@
           </Card>
         );
 
-        // 🌟 動態牆
-        const AchievementDashboard = ({ projects, students }) => {
+        // 🌟 動態牆 (加入點擊過濾功能)
+        const AchievementDashboard = ({ projects, students, activeFilter, onFilterClick }) => {
             const confSubmitted = projects.filter(p => p.status.includes('研討會已投稿')).length;
             const journalSubmitted = projects.filter(p => p.status.includes('期刊已投稿')).length;
             const pilotCompleted = projects.filter(p => p.status.includes('PILOT完成')).length;
             const gameDev = projects.filter(p => p.status.includes('發展中')).length;
             const journalWriting = projects.filter(p => p.status.includes('寫作中')).length;
 
+            const stats = [
+                {label: '乘客總數', val: students.length, color: 'text-white', filter: 'students'},
+                {label: '專案總數', val: projects.length, color: 'text-white', filter: 'all_projects'},
+                {label: '研討會已投稿', val: confSubmitted, color: 'text-green-300', filter: '研討會已投稿'},
+                {label: '期刊已投稿', val: journalSubmitted, color: 'text-green-300', filter: '期刊已投稿'},
+                {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300', filter: 'PILOT完成'},
+                {label: '遊戲發展中', val: gameDev, color: 'text-yellow-300', filter: '發展中'},
+                {label: '期刊寫作中', val: journalWriting, color: 'text-pink-300', filter: '寫作中'}
+            ];
+
             return (
                 <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] shadow-[0_10px_40px_rgba(99,102,241,0.3)] text-white mb-8 overflow-hidden relative border-4 border-white">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                     <div className="absolute bottom-0 left-0 w-40 h-40 bg-pink-300 opacity-20 rounded-full blur-2xl -ml-10 -mb-10"></div>
                     <div className="p-8 relative z-10">
-                        <h2 className="text-2xl font-black mb-6 flex items-center text-white drop-shadow-md">
-                            <i className="fa-solid fa-trophy text-yellow-300 mr-3 text-3xl animate-bounce-soft"></i> 榮譽榜與動態牆
-                        </h2>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+                            <h2 className="text-2xl font-black flex items-center text-white drop-shadow-md">
+                                <i className="fa-solid fa-trophy text-yellow-300 mr-3 text-3xl animate-bounce-soft"></i> 榮譽榜與動態牆
+                            </h2>
+                            {activeFilter && (
+                                <button onClick={() => onFilterClick && onFilterClick(null)} className="mt-3 sm:mt-0 px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white font-bold rounded-full transition text-sm flex items-center w-fit border border-white/40">
+                                    <i className="fa-solid fa-filter-circle-xmark mr-2"></i> 清除過濾
+                                </button>
+                            )}
+                        </div>
+                        
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                            {[
-                                {label: '乘客總數', val: students.length, color: 'text-white'}, {label: '專案總數', val: projects.length, color: 'text-white'},
-                                {label: '研討會已投稿', val: confSubmitted, color: 'text-green-300'}, {label: '期刊已投稿', val: journalSubmitted, color: 'text-green-300'},
-                                {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300'}, {label: '遊戲發展中', val: gameDev, color: 'text-yellow-300'},
-                                {label: '期刊寫作中', val: journalWriting, color: 'text-pink-300'}
-                            ].map((item, idx) => (
-                                <div key={idx} className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 flex flex-col justify-center text-center hover:bg-white/20 transition-colors group">
+                            {stats.map((item, idx) => (
+                                <div key={idx} 
+                                     onClick={() => onFilterClick && onFilterClick(item.filter)}
+                                     className={`bg-white/10 backdrop-blur-md p-4 rounded-2xl border flex flex-col justify-center text-center hover:bg-white/20 transition-all group cursor-pointer ${activeFilter === item.filter ? 'border-yellow-300 shadow-[0_0_15px_rgba(253,224,71,0.5)] bg-white/20 scale-105' : 'border-white/20'}`}>
                                     <span className="text-indigo-100 text-[11px] font-black tracking-wider mb-2 opacity-80">{item.label}</span>
                                     <span className={`text-3xl font-black drop-shadow-lg group-hover:scale-110 transition-transform ${item.color}`}>{item.val}</span>
                                 </div>
@@ -386,7 +407,6 @@
             );
         };
 
-        // --- 登入介面 ---
         const LoginScreen = ({ onLoginSuccess }) => {
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
 
@@ -426,11 +446,7 @@
           );
         };
 
-        // --- 老師儀表板 ---
         const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager }) => {
-          const [sortBy, setSortBy] = useState('latest'); 
-          const [filterDegree, setFilterDegree] = useState('all');
-          const [filterStatus, setFilterStatus] = useState('all'); 
           
           const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
@@ -444,10 +460,8 @@
 
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
           const [newStudent, setNewStudent] = useState({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
-          // 新增專案時加入 mentors 欄位
           const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '' });
           
-          // 修改老師日期的狀態
           const [editingDateProjectId, setEditingDateProjectId] = useState(null);
           const [newDateVal, setNewDateVal] = useState('');
           const [dateReasonVal, setDateReasonVal] = useState('');
@@ -458,16 +472,12 @@
           const [editingConfId, setEditingConfId] = useState(null);
           const [editConfData, setEditConfData] = useState({});
 
-          const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
-          const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
-          const [editAnnouncementData, setEditAnnouncementData] = useState({});
+          // 🌟 動態牆過濾狀態
+          const [activeFilter, setActiveFilter] = useState(null);
 
-          const [newLink, setNewLink] = useState({ title: '', url: '', description: '' });
-          
           const pendingApprovals = projects.filter(p => p.pendingStatus !== null);
           const stagnantProjects = projects.filter(p => p.status.includes("概念發想") && p.pendingStatus === null);
 
-          // === 1. 審核流程修改 ===
           const handleApproveInitiate = (project) => {
              const dateStr = new Date().toLocaleDateString('zh-TW');
              const prefillNote = `\n\n<p><b>[${dateStr}] ✅ 老師已核准進度變更為：「${project.pendingStatus}」。</b></p><p>老師補充說明：</p>`;
@@ -492,7 +502,7 @@
                          lastUpdate: new Date().toISOString().split('T')[0], notes: notesText, hasUnreadMemo: true, 
                          overdueEmailSent: false
                      };
-                 } else { // reject
+                 } else { 
                      updated = { ...project, pendingStatus: null, pendingDescription: null, notes: notesText, hasUnreadMemo: true };
                  }
                  setPendingApprovalFlow(null);
@@ -510,24 +520,22 @@
              setPendingApprovalFlow(null);
           };
 
-          // === 老師主動修改日期與發送通知 ===
           const handleSaveDateChange = (project) => {
              if(!newDateVal || !dateReasonVal) return alert("請填寫新日期與修改理由！");
              const dateStr = new Date().toLocaleDateString('zh-TW');
-             const prefillNote = `<br><br><p><b><span style="color:#e11d48">[${dateStr}] 🗓️ 老師已將「預估抵達下個階段的日期」修改為：${newDateVal}。</span></b></p><p>老師說明：${dateReasonVal}</p>`;
+             const prefillNote = `<br><br><p><b><span style="color:#e11d48">[${dateStr}] 🗓️ 老師已將「預估抵達下個階段的日期」修改為：${formatDate(newDateVal)}。</span></b></p><p>老師說明：${dateReasonVal}</p>`;
              const student = students.find(s => s.id === project.studentId);
              
              const updated = { ...project, nextStageDate: newDateVal, notes: (project.notes || '') + prefillNote, hasUnreadMemo: true };
              setProjects(projects.map(p => p.id === project.id ? updated : p));
              syncToBackend('updateProject', updated);
              
-             // 嘗試發送 Date Change Email (若 GAS 後端有實作此 action)
              syncToBackend('sendDateChangeEmail', { 
                  studentEmail: student?.email, 
                  studentName: student?.name,
                  title: project.title, 
-                 oldDate: project.nextStageDate || '未設定', 
-                 newDate: newDateVal, 
+                 oldDate: formatDate(project.nextStageDate) || '未設定', 
+                 newDate: formatDate(newDateVal), 
                  reason: dateReasonVal 
              });
              
@@ -537,7 +545,6 @@
              alert("✅ 日期已成功修改，並已寫入備忘錄且通知學生！");
           };
 
-          // === 新增乘客(學生) ===
           const handleAddStudent = () => {
               if (!newStudent.name || !newStudent.email) return alert("姓名與登入用 Email 為必填！");
               const s = { id: 's' + Date.now(), ...newStudent };
@@ -548,7 +555,6 @@
               setNewStudent({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
           };
 
-          // === 新增專案 ===
           const handleAddProject = () => {
               if (!newProjectForStudent.title) return alert("專案名稱為必填！");
               const student = students.find(s => s.id === manageStudentProjectsId);
@@ -564,7 +570,6 @@
               setNewProjectForStudent({ title: '', status: STATUSES[0], mentors: '' });
           };
 
-          // === 提醒一下 ===
           const handlePoke = (projectId) => {
              const project = projects.find(p => p.id === projectId);
              const today = new Date().toLocaleDateString('zh-TW');
@@ -574,7 +579,6 @@
              alert("已送出提醒！學生將會在儀表板看到您的關注。");
           };
 
-          // === 修改指導學長姐 ===
           const handleUpdateMentors = (projectId, newMentors) => {
               const project = projects.find(p => p.id === projectId);
               if (project && project.mentors !== newMentors) {
@@ -584,7 +588,6 @@
               }
           };
 
-          // === 研討會存檔與編輯邏輯 ===
           const handleAddConfSubmit = () => {
             if (!newConf.name || !newConf.confirmDeadline) return alert("名稱與確認死線為必填！");
             const conf = { id: 'c' + Date.now(), ...newConf };
@@ -604,7 +607,6 @@
             setConferences(updatedConfs); syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
           };
 
-          // === 本機資料夾設定邏輯 ===
           const handleSetLocalFolder = (student) => {
             const path = prompt(`請設定 ${student.name} 的本機資料夾路徑：\n(如：D:\\Research\\${student.name})`, student.localFolder || "");
             if (path !== null) {
@@ -614,7 +616,6 @@
             }
           };
 
-          // === 快速設定 Messenger 連結 ===
           const handleSetContactLink = (student) => {
             const link = prompt(`請輸入 ${student.name} 的 FB/Line/Messenger 聯絡網址：\n(此設定也可用鉛筆圖示編輯)`, student.contactLink || "");
             if (link !== null && link.trim() !== '') {
@@ -624,9 +625,64 @@
             }
           };
 
+          // 衍生過濾後的專案
+          let filteredProjectsToShow = [];
+          if (activeFilter === 'all_projects') {
+              filteredProjectsToShow = projects;
+          } else if (activeFilter && activeFilter !== 'students') {
+              filteredProjectsToShow = projects.filter(p => p.status.includes(activeFilter));
+          }
+
           return (
             <div className="space-y-8 animate-fade-in pb-20">
-              <AchievementDashboard projects={projects} students={students} />
+              <AchievementDashboard 
+                  projects={projects} 
+                  students={students} 
+                  activeFilter={activeFilter} 
+                  onFilterClick={setActiveFilter} 
+              />
+
+              {/* 🌟 點擊榮譽榜後展開的過濾結果區塊 */}
+              {activeFilter && activeFilter !== 'students' && (
+                  <div className="mb-8 animate-fade-in bg-indigo-50/50 p-6 rounded-3xl border-2 border-indigo-100">
+                      <div className="flex justify-between items-center mb-6">
+                          <h3 className="text-xl font-black text-indigo-900 flex items-center">
+                              <i className="fa-solid fa-filter text-indigo-500 mr-3"></i> 過濾結果：
+                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-xl ml-2 text-lg">{activeFilter === 'all_projects' ? '所有專案' : activeFilter}</span>
+                              <span className="text-sm text-slate-500 ml-3">({filteredProjectsToShow.length} 筆)</span>
+                          </h3>
+                      </div>
+                      
+                      {filteredProjectsToShow.length === 0 ? (
+                          <div className="bg-white p-8 rounded-3xl text-center text-slate-400 font-bold border-2 border-slate-100 shadow-sm flex flex-col items-center">
+                              <i className="fa-regular fa-folder-open text-4xl mb-2 text-slate-300"></i>
+                              此分類目前沒有專案。
+                          </div>
+                      ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                              {filteredProjectsToShow.map(project => {
+                                  const student = students.find(s => s.id === project.studentId);
+                                  return (
+                                      <div key={project.id} className="bg-white border-2 border-indigo-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all flex flex-col">
+                                          <div className="flex justify-between items-start mb-2">
+                                              <div className="text-sm font-black text-white bg-indigo-500 px-3 py-1 rounded-lg shadow-sm">{student?.name || '未知乘客'}</div>
+                                              <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">更新: {formatDate(project.lastUpdate)}</div>
+                                          </div>
+                                          <h4 className="font-black text-slate-800 text-lg mb-3 leading-tight">{project.title}</h4>
+                                          <div className="mb-4 mt-auto"><StatusBadge status={project.status} /></div>
+                                          
+                                          <div className="flex justify-end border-t-2 border-slate-50 pt-3">
+                                              <button onClick={() => setManageStudentProjectsId(project.studentId)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-black rounded-xl text-sm hover:bg-indigo-100 active:scale-95 transition flex items-center">
+                                                  <i className="fa-solid fa-bars-progress mr-2"></i>管理此專案
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      )}
+                  </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                  <AnnouncementsBoard announcements={announcements} />
@@ -659,7 +715,7 @@
                             <div className="text-sm mt-3 flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-fit font-bold text-slate-600">
                               <span className="line-through opacity-60">{project.status}</span><i className="fa-solid fa-circle-arrow-right text-orange-400"></i><span className="text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">{project.pendingStatus}</span>
                             </div>
-                            <div className="mt-2 text-xs font-black text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg w-fit border border-rose-100"><i className="fa-regular fa-calendar mr-1"></i>預估抵達下個階段: {project.nextStageDate || '未設定'}</div>
+                            <div className="mt-2 text-xs font-black text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg w-fit border border-rose-100"><i className="fa-regular fa-calendar mr-1"></i>預估抵達下個階段: {formatDate(project.nextStageDate) || '未設定'}</div>
                             {project.pendingDescription && <div className="mt-3 bg-sky-50 p-3 rounded-xl border border-sky-100 text-sm text-sky-900"><span className="font-black text-sky-700">學生的話：</span><p className="whitespace-pre-wrap font-medium">{project.pendingDescription}</p></div>}
                           </div>
                           <div className="flex gap-2 w-full xl:w-auto shrink-0">
@@ -672,7 +728,6 @@
                   </div>
                 </Card>
 
-                {/* 卡關警報區：提醒一下 */}
                 <Card className="border-t-[6px] border-t-red-400 flex flex-col overflow-hidden">
                   <div className="p-5 border-b bg-gradient-to-r from-red-50 to-white">
                     <h3 className="font-black text-xl text-red-900 flex items-center"><i className="fa-solid fa-triangle-exclamation text-red-500 mr-3 animate-pulse"></i> 卡關警報區</h3>
@@ -719,7 +774,6 @@
                       <Card key={student.id} className="border-t-[6px] border-t-indigo-400 relative flex flex-col h-full overflow-visible">
                         <div className="p-5 flex-grow flex flex-col">
                           
-                          {/* 頂端列：姓名、年級標籤、卡關警告、右上角小圖示 */}
                           <div className="flex justify-between items-start mb-4 gap-2">
                               <div className="flex items-center flex-wrap gap-2">
                                   <span className="font-black text-xl text-slate-800">{student.name}</span>
@@ -727,9 +781,7 @@
                                   {isStagnant && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm animate-pulse">卡關</span>}
                               </div>
                               
-                              {/* 實用小功能圖示列 */}
                               <div className="flex gap-1">
-                                  {/* 本機資料夾 */}
                                   <button onClick={() => handleSetLocalFolder(student)} className="w-8 h-8 bg-slate-50 hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 rounded-lg flex items-center justify-center transition border border-slate-200" title="設定本機資料夾路徑">
                                       <i className="fa-solid fa-folder-tree"></i>
                                   </button>
@@ -738,11 +790,9 @@
                                           <i className="fa-regular fa-copy"></i>
                                       </button>
                                   )}
-                                  {/* 編輯學生資料 */}
                                   <button onClick={() => setEditingStudent(student)} className="w-8 h-8 bg-slate-50 hover:bg-purple-100 text-slate-600 hover:text-purple-600 rounded-lg flex items-center justify-center transition border border-slate-200" title="編輯乘客/學生資料">
                                       <i className="fa-solid fa-pen"></i>
                                   </button>
-                                  {/* Messenger/Line 聯絡 */}
                                   <button 
                                       onClick={() => student.contactLink ? window.open(student.contactLink, '_blank') : handleSetContactLink(student)}
                                       className={`w-8 h-8 rounded-lg flex items-center justify-center transition border border-slate-200 ${student.contactLink ? 'bg-slate-50 hover:bg-sky-100 text-sky-500 hover:text-sky-600' : 'bg-slate-50 hover:bg-slate-200 text-slate-300 hover:text-slate-500'}`}
@@ -753,21 +803,19 @@
                               </div>
                           </div>
 
-                          {/* 中間列：管理專案與最後更新時間 */}
                           <div className="grid grid-cols-2 gap-2 mb-4">
                               <button onClick={() => setManageStudentProjectsId(student.id)} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-3 rounded-2xl border-2 border-indigo-100 flex flex-col items-center justify-center font-black transition active:scale-95">
                                   <i className="fa-solid fa-bars-progress mb-1"></i> 管理專案
                                   <span className="text-xs mt-1 text-indigo-500">{studentProjects.length} 個</span>
                               </button>
-                              <div className="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100 flex flex-col items-center justify-center text-center">
+                              <div className="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100 flex flex-col items-center justify-center text-center overflow-hidden">
                                   <span className="text-xs font-bold text-slate-500 mb-1">最後更新</span>
-                                  <span className="text-xs font-black text-slate-700">
-                                      {latestUpdate && !isNaN(latestUpdate.getTime()) ? latestUpdate.toLocaleDateString('zh-TW') : '無資料'}
+                                  <span className="text-xs font-black text-slate-700 truncate w-full px-1">
+                                      {latestUpdate && !isNaN(latestUpdate.getTime()) ? formatDate(latestUpdate) : '無資料'}
                                   </span>
                               </div>
                           </div>
 
-                          {/* 底部列：指導註記 */}
                           <div className="mt-auto pt-2 bg-yellow-50 p-3 rounded-2xl border-2 border-yellow-200">
                             <label className="text-xs font-black text-yellow-800 mb-2 block"><i className="fa-solid fa-thumbtack mr-1"></i>指導註記 / 刪除紀錄</label>
                             <textarea className="w-full text-sm p-2 border-2 rounded-xl bg-white focus:outline-none focus:border-yellow-400 resize-none font-medium text-slate-700 shadow-inner" rows="2" placeholder="紀錄重點或原因..." value={student.notes || ""} onChange={(e) => setStudents(students.map(s => s.id === student.id ? { ...s, notes: e.target.value } : s))} onBlur={() => syncToBackend('updateStudent', students.find(s => s.id === student.id))}></textarea>
@@ -779,7 +827,7 @@
                 </div>
               </div>
 
-              {/* 🌟 新增乘客 (學生) Modal */}
+              {/* 🌟 新增乘客 Modal */}
               {isAddStudentOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
@@ -810,12 +858,12 @@
                               <button onClick={() => setEditingStudent(null)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
                           </div>
                           <div className="p-6 bg-slate-50 space-y-4">
-                              <div><label className="text-sm font-bold text-slate-700 block mb-1">姓名</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white" value={editingStudent.name || ''} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} /></div>
-                              <div><label className="text-sm font-bold text-slate-700 block mb-1">年級 (例如：博一、碩二)</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white" placeholder="可自由填寫" value={editingStudent.degree || ''} onChange={e => setEditingStudent({...editingStudent, degree: e.target.value})} /></div>
-                              <div><label className="text-sm font-bold text-slate-700 block mb-1">通訊連結 (FB/Line 網址)</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white" value={editingStudent.contactLink || ''} onChange={e => setEditingStudent({...editingStudent, contactLink: e.target.value})} /></div>
+                              <div><label className="text-sm font-bold text-slate-700 block mb-1">姓名</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white focus:border-indigo-400 outline-none" value={editingStudent.name || ''} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} /></div>
+                              <div><label className="text-sm font-bold text-slate-700 block mb-1">年級 (例如：博一、碩二)</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white focus:border-indigo-400 outline-none" placeholder="可自由填寫" value={editingStudent.degree || ''} onChange={e => setEditingStudent({...editingStudent, degree: e.target.value})} /></div>
+                              <div><label className="text-sm font-bold text-slate-700 block mb-1">通訊連結 (FB/Line 網址)</label><input type="text" className="w-full p-2 border-2 rounded-xl bg-white focus:border-indigo-400 outline-none" value={editingStudent.contactLink || ''} onChange={e => setEditingStudent({...editingStudent, contactLink: e.target.value})} /></div>
                               <div className="mt-6 flex justify-end gap-3">
                                   <button onClick={() => setEditingStudent(null)} className="px-5 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl">取消</button>
-                                  <button onClick={() => { syncToBackend('updateStudent', editingStudent); setStudents(students.map(s => s.id === editingStudent.id ? editingStudent : s)); setEditingStudent(null); }} className="px-5 py-2 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md">儲存變更</button>
+                                  <button onClick={() => { syncToBackend('updateStudent', editingStudent); setStudents(students.map(s => s.id === editingStudent.id ? editingStudent : s)); setEditingStudent(null); }} className="px-5 py-2 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">儲存變更</button>
                               </div>
                           </div>
                       </div>
@@ -849,8 +897,8 @@
                                     <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-3 p-3 border-2 border-teal-200 rounded-xl bg-teal-50/50">
                                         <div><label className="text-xs font-bold text-slate-500 mb-1 block">名稱</label><input className="w-full p-2 border-2 rounded-lg text-sm font-bold bg-white" value={editConfData.name} onChange={e=>setEditConfData({...editConfData, name:e.target.value})} /></div>
                                         <div><label className="text-xs font-bold text-slate-500 mb-1 block">網址</label><input className="w-full p-2 border-2 rounded-lg text-sm bg-white" value={editConfData.url} onChange={e=>setEditConfData({...editConfData, url:e.target.value})} /></div>
-                                        <div><label className="text-xs font-bold text-slate-500 mb-1 block">大會截稿日</label><input type="date" className="w-full p-2 border-2 rounded-lg text-sm bg-white" value={editConfData.submitDeadline} onChange={e=>setEditConfData({...editConfData, submitDeadline:e.target.value})} /></div>
-                                        <div><label className="text-xs font-bold text-rose-500 mb-1 block">老師死線</label><input type="date" className="w-full p-2 border-2 border-rose-200 rounded-lg text-sm bg-rose-50 text-rose-700" value={editConfData.confirmDeadline} onChange={e=>setEditConfData({...editConfData, confirmDeadline:e.target.value})} /></div>
+                                        <div><label className="text-xs font-bold text-slate-500 mb-1 block">大會截稿日</label><input type="date" className="w-full p-2 border-2 rounded-lg text-sm bg-white" value={formatDate(editConfData.submitDeadline)} onChange={e=>setEditConfData({...editConfData, submitDeadline:e.target.value})} /></div>
+                                        <div><label className="text-xs font-bold text-rose-500 mb-1 block">老師死線</label><input type="date" className="w-full p-2 border-2 border-rose-200 rounded-lg text-sm bg-rose-50 text-rose-700" value={formatDate(editConfData.confirmDeadline)} onChange={e=>setEditConfData({...editConfData, confirmDeadline:e.target.value})} /></div>
                                         <div className="md:col-span-2 flex justify-end gap-2 mt-2">
                                             <button onClick={()=>setEditingConfId(null)} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-bold">取消</button>
                                             <button onClick={handleSaveEditConf} className="bg-teal-500 text-white px-5 py-2 rounded-lg font-black hover:bg-teal-600 shadow-md">儲存變更</button>
@@ -861,8 +909,8 @@
                                         <div className="w-full">
                                             <h5 className="font-black text-teal-800 text-lg">{conf.name}</h5>
                                             <div className="flex flex-col sm:flex-row gap-2 mt-2 text-xs font-bold">
-                                                {conf.submitDeadline && <span className="text-slate-500 bg-slate-100 px-2 py-1 rounded-md">截稿: {conf.submitDeadline}</span>}
-                                                <span className="text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">老師死線: {conf.confirmDeadline}</span>
+                                                {conf.submitDeadline && <span className="text-slate-500 bg-slate-100 px-2 py-1 rounded-md">截稿: {formatDate(conf.submitDeadline)}</span>}
+                                                <span className="text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">老師死線: {formatDate(conf.confirmDeadline)}</span>
                                                 {conf.url && <a href={conf.url} target="_blank" rel="noreferrer" className="text-teal-600 bg-teal-50 px-2 py-1 rounded-md hover:underline"><i className="fa-solid fa-link"></i> 官網</a>}
                                             </div>
                                         </div>
@@ -880,7 +928,7 @@
                 </div>
               )}
 
-              {/* 🌟 專案管理 Modal (包含修改學長姐與改日期) */}
+              {/* 🌟 專案管理 Modal */}
               {manageStudentProjectsId && (
                 <div className="fixed inset-0 bg-indigo-900/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
                   <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border-4 border-indigo-100 animate-modal-pop">
@@ -902,7 +950,6 @@
                                 <div key={project.id} className="bg-white border-2 border-indigo-50 rounded-3xl p-6 shadow-sm">
                                     <h4 className="font-black text-2xl text-slate-800 mb-3">{project.title}</h4>
                                     
-                                    {/* 指導學長姐編輯區 */}
                                     <div className="mb-4 text-sm font-black text-indigo-700 flex items-center gap-2 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 w-fit">
                                         <i className="fa-solid fa-user-graduate text-indigo-500"></i> 指導學長姐/專家：
                                         <input 
@@ -917,16 +964,14 @@
                                     <div className="flex gap-3 mb-4 items-center flex-wrap">
                                         <StatusBadge status={project.status} />
                                         <div className="text-xs font-black text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100 flex items-center shadow-sm">
-                                            <i className="fa-regular fa-calendar-check mr-2"></i> 預估抵達下個階段: {project.nextStageDate || '未填寫'}
+                                            <i className="fa-regular fa-calendar-check mr-2"></i> 預估抵達下個階段: {formatDate(project.nextStageDate) || '未填寫'}
                                             
-                                            {/* 修改日期的小鉛筆按鈕 */}
-                                            <button onClick={() => {setEditingDateProjectId(project.id); setNewDateVal(project.nextStageDate || ''); setDateReasonVal('');}} className="ml-3 bg-rose-200 text-rose-800 w-6 h-6 rounded hover:bg-rose-300 flex items-center justify-center transition active:scale-95" title="修改日期">
+                                            <button onClick={() => {setEditingDateProjectId(project.id); setNewDateVal(formatDate(project.nextStageDate) || ''); setDateReasonVal('');}} className="ml-3 bg-rose-200 text-rose-800 w-6 h-6 rounded hover:bg-rose-300 flex items-center justify-center transition active:scale-95" title="修改日期">
                                                 <i className="fa-solid fa-pen"></i>
                                             </button>
                                         </div>
                                     </div>
                                     
-                                    {/* 老師修改日期與理由的編輯面板 */}
                                     {editingDateProjectId === project.id && (
                                         <div className="bg-rose-50 border-2 border-rose-200 p-4 rounded-2xl mb-4 animate-fade-in shadow-inner">
                                             <h5 className="font-black text-rose-800 mb-2"><i className="fa-solid fa-calendar-pen mr-2"></i>修改預估抵達日期</h5>
@@ -990,13 +1035,11 @@
                   </div>
               )}
 
-              {/* 共用備忘錄 */}
               <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={handleCloseProjectNotes} onSave={handleSaveProjectNotes} isTeacher={true} />
             </div>
           );
         };
 
-        // --- 學生工作區 ---
         const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
           if (!student) return <div className="text-center py-20"><i className="fa-solid fa-train-subway text-6xl text-indigo-400 mb-6 animate-bounce-soft"></i></div>;
 
@@ -1014,7 +1057,7 @@
                   if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !p.pendingStatus) {
                       const daysLeft = calculateDaysLeft(p.nextStageDate);
                       if (daysLeft !== null && daysLeft < 0) {
-                          syncToBackend('sendOverdueEmail', { projectId: p.id, title: p.title, nextStageDate: p.nextStageDate, studentEmail: student.email });
+                          syncToBackend('sendOverdueEmail', { projectId: p.id, title: p.title, nextStageDate: formatDate(p.nextStageDate), studentEmail: student.email });
                           const updated = {...p, overdueEmailSent: true};
                           setProjects(prev => prev.map(proj => proj.id === p.id ? updated : proj));
                       }
@@ -1056,14 +1099,12 @@
             <div className="space-y-8 animate-fade-in pb-20">
               <AchievementDashboard projects={projects} students={students} />
 
-              {/* 學生端顯示研討會清單 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                  <AnnouncementsBoard announcements={announcements} />
                  <ConferencesBoard conferences={conferences} />
                  <UsefulLinksBoard links={usefulLinks} />
               </div>
 
-              {/* 學生抬頭與聯絡 */}
               <div className="flex flex-col md:flex-row justify-between items-end md:items-center bg-white/80 backdrop-blur-md p-6 rounded-[2rem] border-2 border-white shadow-sm mb-8">
                 <div>
                   <h2 className="text-3xl font-black text-indigo-900 tracking-tight flex items-center"><i className="fa-solid fa-ticket text-indigo-400 mr-3 text-2xl -rotate-12"></i> Hi, {student.name}</h2>
@@ -1077,10 +1118,9 @@
 
                    return (
                   <Card key={project.id} className="relative flex flex-col border-t-[8px] border-t-indigo-400 overflow-visible mt-6">
-                    {/* 提醒一下 (Poke) 的警示區塊 */}
                     {project.lastPokeDate && (
                         <div className="absolute -top-12 left-0 w-full bg-rose-500 text-white font-black p-3 rounded-t-2xl shadow-lg flex items-center justify-center animate-bounce z-0">
-                            <i className="fa-solid fa-hand-point-right mr-2 text-xl"></i> 老師在 {project.lastPokeDate} 關注了此專案，請盡快更新進度！
+                            <i className="fa-solid fa-hand-point-right mr-2 text-xl"></i> 老師在 {formatDate(project.lastPokeDate)} 關注了此專案，請盡快更新進度！
                         </div>
                     )}
 
@@ -1093,7 +1133,6 @@
                     <div className="p-6 md:p-8 flex-grow flex flex-col bg-white rounded-3xl relative z-10">
                       <h3 className="font-black text-2xl text-slate-800 leading-tight mb-3">{project.title}</h3>
                       
-                      {/* 顯示指導學長姐 */}
                       {project.mentors && (
                           <div className="text-sm font-black text-indigo-600 mb-4 flex items-center bg-indigo-50 w-fit px-3 py-1.5 rounded-lg border border-indigo-100">
                               <i className="fa-solid fa-user-graduate mr-2"></i>指導學長姐/專家：{project.mentors}
@@ -1114,11 +1153,10 @@
                             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                           
-                          {/* 顯示目前的預估日期與剩餘天數 (若沒有變更狀態時顯示) */}
                           {!draftStatuses[project.id] && !project.pendingStatus && project.nextStageDate && (
                               <div className={`p-3 rounded-xl border-2 font-black text-sm flex items-center ${daysToNext !== null && daysToNext < 0 ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' : daysToNext !== null && daysToNext <= 14 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
                                   <i className="fa-regular fa-calendar-check mr-2"></i> 
-                                  預估抵達下個階段：{project.nextStageDate} 
+                                  預估抵達下個階段：{formatDate(project.nextStageDate)} 
                                   {daysToNext !== null && <span className="ml-2">({daysToNext < 0 ? '已逾期！' : `剩餘 ${daysToNext} 天`})</span>}
                               </div>
                           )}
