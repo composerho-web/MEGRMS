@@ -552,18 +552,41 @@
               .map(p => ({ ...p, alertReasons: getAlerts(p) }))
               .filter(p => p.alertReasons.length > 0);
 
-          const handleApproveInitiate = (project) => {
-             const dateStr = new Date().toLocaleDateString('zh-TW');
-             const prefillNote = `\n\n<p><b>[${dateStr}] ✅ 老師已核准進度變更為：「${project.pendingStatus}」。</b></p><p>老師補充說明：</p>`;
-             setEditingProjectNotes({...project, notes: (project.notes || '') + prefillNote});
-             setPendingApprovalFlow({ type: 'approve', projectId: project.id, newStatus: project.pendingStatus, nextDate: project.nextStageDate });
+          const handleApprove = (project) => {
+              if(!confirm(`✅ 確定要核准【${project.title}】的進度為「${project.pendingStatus}」嗎？\n(系統將自動寫入備忘錄並變更狀態)`)) return;
+              
+              const dateStr = new Date().toLocaleDateString('zh-TW');
+              const updated = { 
+                  ...project, 
+                  status: project.pendingStatus, 
+                  pendingStatus: null, 
+                  pendingDescription: null, 
+                  lastUpdate: new Date().toISOString().split('T')[0], 
+                  hasUnreadMemo: true, 
+                  overdueEmailSent: false, 
+                  lastPokeDate: null 
+              };
+              updated.notes = (project.notes || '') + `<br><br><p><b><span style="color:#059669">[${dateStr}] ✅ 老師已核准進度變更為：「${project.pendingStatus}」。</span></b></p>`;
+              
+              setProjects(projects.map(p => p.id === project.id ? updated : p));
+              syncToBackend('updateProject', updated);
           };
 
-          const handleRejectInitiate = (project) => {
-             const dateStr = new Date().toLocaleDateString('zh-TW');
-             const prefillNote = `\n\n<p><b><span style="color:red">[${dateStr}] ❌ 老師已退回進度變更申請 (原申請：「${project.pendingStatus}」)。</span></b></p><p>退回原因與修改建議：</p>`;
-             setEditingProjectNotes({...project, notes: (project.notes || '') + prefillNote});
-             setPendingApprovalFlow({ type: 'reject', projectId: project.id });
+          const handleReject = (project) => {
+              const reason = prompt(`❌ 確定要退回【${project.title}】的申請嗎？\n請輸入退回原因或給學生的建議 (將自動寫入備忘錄)：`);
+              if (reason === null) return;
+              
+              const dateStr = new Date().toLocaleDateString('zh-TW');
+              const updated = { 
+                  ...project, 
+                  pendingStatus: null, 
+                  pendingDescription: null, 
+                  hasUnreadMemo: true 
+              };
+              updated.notes = (project.notes || '') + `<br><br><p><b><span style="color:#e11d48">[${dateStr}] ❌ 老師已退回進度變更申請 (原申請：「${project.pendingStatus}」)。</span></b><br>退回原因與建議：${reason}</p>`;
+
+              setProjects(projects.map(p => p.id === project.id ? updated : p));
+              syncToBackend('updateProject', updated);
           };
 
           const handleSaveProjectNotes = (projectId, notesText) => {
@@ -835,8 +858,8 @@
                             {project.pendingDescription && <div className="mt-3 bg-sky-50 p-3 rounded-xl border border-sky-100 text-sm text-sky-900"><span className="font-black text-sky-700">學生的話：</span><p className="whitespace-pre-wrap font-medium">{project.pendingDescription}</p></div>}
                           </div>
                           <div className="flex gap-2 w-full xl:w-auto shrink-0">
-                            <button onClick={() => handleApproveInitiate(project)} className="px-5 py-3 bg-green-500 text-white font-black rounded-xl hover:bg-green-600 active:scale-95"><i className="fa-solid fa-check mr-1"></i> 核准</button>
-                            <button onClick={() => handleRejectInitiate(project)} className="px-5 py-3 bg-white text-red-500 font-black rounded-xl border-2 border-red-200 hover:bg-red-50 active:scale-95">退回</button>
+                            <button onClick={() => handleApprove(project)} className="px-5 py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 active:scale-95 shadow-sm"><i className="fa-solid fa-check mr-1"></i> 核准</button>
+                            <button onClick={() => handleReject(project)} className="px-5 py-3 bg-white text-rose-500 font-black rounded-xl border-2 border-rose-200 hover:bg-rose-50 active:scale-95 shadow-sm"><i className="fa-solid fa-xmark mr-1"></i> 退回</button>
                           </div>
                         </div>
                       ))
@@ -1368,6 +1391,28 @@
           const [draftDescriptions, setDraftDescriptions] = useState({});
           const [draftNextDates, setDraftNextDates] = useState({}); 
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
+          
+          const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+          const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0] });
+
+          const handleAddProjectSubmit = () => {
+              if(!newProject.title) return alert("請輸入專案名稱！");
+              const p = {
+                  id: 'p' + Date.now(),
+                  studentId: student.id,
+                  studentName: student.name,
+                  title: newProject.title,
+                  status: newProject.status,
+                  lastUpdate: new Date().toISOString().split('T')[0],
+                  pendingStatus: null,
+                  notes: `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b></p>`
+              };
+              const updated = [...projects, p];
+              setProjects(updated);
+              syncToBackend('addProject', p);
+              setIsAddProjectModalOpen(false);
+              setNewProject({ title: '', status: STATUSES[0] });
+          };
 
           useEffect(() => {
               myActiveProjects.forEach(p => {
@@ -1423,9 +1468,14 @@
                  <UsefulLinksBoard links={usefulLinks} />
               </div>
 
-              <div className="flex flex-col md:flex-row justify-between items-end md:items-center bg-white/80 backdrop-blur-md p-6 rounded-[2rem] border-2 border-white shadow-sm mb-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/80 backdrop-blur-md p-6 rounded-[2rem] border-2 border-white shadow-sm mb-8 gap-4">
                 <div>
                   <h2 className="text-3xl font-black text-indigo-900 tracking-tight flex items-center"><i className="fa-solid fa-ticket text-indigo-400 mr-3 text-2xl -rotate-12"></i> Hi, {student.name}</h2>
+                </div>
+                <div className="flex gap-3">
+                  <a href="mailto:composerho@gmail.com" className="px-5 py-2.5 bg-blue-100 text-blue-700 font-black rounded-xl hover:bg-blue-200 active:scale-95 transition flex items-center shadow-sm">
+                      <i className="fa-solid fa-envelope mr-2"></i> 聯繫指導教授
+                  </a>
                 </div>
               </div>
 
@@ -1467,38 +1517,58 @@
                       <div className="bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 mt-auto shadow-inner">
                         <label className="text-base font-black text-slate-700 block mb-3 flex items-center"><i className="fa-solid fa-bolt mr-2 text-yellow-500"></i> 更新進度狀態：</label>
                         <div className="flex flex-col gap-4">
-                          <select className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={project.pendingStatus || draftStatuses[project.id] || project.status} onChange={(e) => setDraftStatuses({...draftStatuses, [project.id]: e.target.value})} disabled={project.pendingStatus !== null}>
-                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                          
-                          {!draftStatuses[project.id] && !project.pendingStatus && project.nextStageDate && (
-                              <div className={`p-3 rounded-xl border-2 font-black text-sm flex items-center ${daysToNext !== null && daysToNext < 0 ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' : daysToNext !== null && daysToNext <= 14 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
-                                  <i className="fa-regular fa-calendar-check mr-2"></i> 
-                                  預估抵達下個階段：{formatDate(project.nextStageDate)} 
-                                  {daysToNext !== null && <span className="ml-2">({daysToNext < 0 ? '已逾期！' : `剩餘 ${daysToNext} 天`})</span>}
-                              </div>
-                          )}
-                          
-                          {draftStatuses[project.id] && draftStatuses[project.id] !== project.status && !project.pendingStatus && (
-                            <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200 shadow-sm animate-fade-in relative mt-2">
-                              <label className="text-sm font-black text-rose-600 block mb-2"><i className="fa-solid fa-calendar-days mr-1"></i> 預估抵達下個階段的日期 *</label>
-                              <input type="date" className="w-full p-3 border-2 border-rose-200 rounded-xl bg-white font-bold mb-4 text-rose-700 outline-none focus:border-rose-400" value={draftNextDates[project.id] || ''} onChange={(e) => setDraftNextDates({...draftNextDates, [project.id]: e.target.value})} />
+                          {(() => {
+                              const isPending = project.pendingStatus && project.pendingStatus.trim() !== "";
+                              const displayStatus = isPending ? project.pendingStatus : (draftStatuses[project.id] || project.status);
+                              return (
+                                  <>
+                                      <select 
+                                        className={`w-full p-3 border-2 rounded-xl font-bold transition-colors outline-none focus:border-indigo-400 ${isPending ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`} 
+                                        value={displayStatus} 
+                                        onChange={(e) => setDraftStatuses({...draftStatuses, [project.id]: e.target.value})} 
+                                        disabled={isPending}
+                                      >
+                                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                      
+                                      {!draftStatuses[project.id] && !isPending && project.nextStageDate && (
+                                          <div className={`p-3 rounded-xl border-2 font-black text-sm flex items-center ${daysToNext !== null && daysToNext < 0 ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' : daysToNext !== null && daysToNext <= 14 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                              <i className="fa-regular fa-calendar-check mr-2"></i> 
+                                              預估抵達下個階段：{formatDate(project.nextStageDate)} 
+                                              {daysToNext !== null && <span className="ml-2">({daysToNext < 0 ? '已逾期！' : `剩餘 ${daysToNext} 天`})</span>}
+                                          </div>
+                                      )}
+                                      
+                                      {draftStatuses[project.id] && draftStatuses[project.id] !== project.status && !isPending && (
+                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200 shadow-sm animate-fade-in relative mt-2">
+                                          <label className="text-sm font-black text-rose-600 block mb-2"><i className="fa-solid fa-calendar-days mr-1"></i> 預估抵達下個階段的日期 *</label>
+                                          <input type="date" className="w-full p-3 border-2 border-rose-200 rounded-xl bg-white font-bold mb-4 text-rose-700 outline-none focus:border-rose-400" value={draftNextDates[project.id] || ''} onChange={(e) => setDraftNextDates({...draftNextDates, [project.id]: e.target.value})} />
 
-                              <label className="text-sm font-black text-indigo-900 block mb-2">給老師的話 <span className="text-indigo-400 font-bold">(選填)</span></label>
-                              <textarea className="w-full text-sm p-3 border-2 border-white rounded-xl focus:border-indigo-400 bg-white mb-3 resize-none font-medium" rows="2" value={draftDescriptions[project.id] || ''} onChange={(e) => setDraftDescriptions({...draftDescriptions, [project.id]: e.target.value})}></textarea>
-                              
-                              <div className="flex justify-end">
-                                <button onClick={() => handleSubmitRequest(project.id, project.status)} className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 active:scale-95 flex items-center shadow-md">
-                                  <i className="fa-solid fa-paper-plane mr-2"></i> 送出審核並通知老師
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                                          <label className="text-sm font-black text-indigo-900 block mb-2">給老師的話 <span className="text-indigo-400 font-bold">(選填)</span></label>
+                                          <textarea className="w-full text-sm p-3 border-2 border-white rounded-xl focus:border-indigo-400 bg-white mb-3 resize-none font-medium" rows="2" value={draftDescriptions[project.id] || ''} onChange={(e) => setDraftDescriptions({...draftDescriptions, [project.id]: e.target.value})}></textarea>
+                                          
+                                          <div className="flex justify-end">
+                                            <button onClick={() => handleSubmitRequest(project.id, project.status)} className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 active:scale-95 flex items-center shadow-md">
+                                              <i className="fa-solid fa-paper-plane mr-2"></i> 送出審核並通知老師
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                  </>
+                              );
+                          })()}
                         </div>
                       </div>
                     </div>
                   </Card>
                 )})}
+                
+                {/* 🌟 學生專屬的發想新專案按鈕 */}
+                <Card className="border-dashed border-4 border-indigo-200 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-400 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-600 transition cursor-pointer group min-h-[300px] mt-6" onClick={() => setIsAddProjectModalOpen(true)}>
+                    <i className="fa-solid fa-circle-plus text-5xl mb-4 group-hover:scale-110 transition-transform"></i>
+                    <span className="font-black text-xl">發想新專案</span>
+                    <span className="text-sm font-bold opacity-70 mt-2">點擊開啟新旅程</span>
+                </Card>
               </div>
               
               {myTerminatedProjects.length > 0 && (
@@ -1516,6 +1586,33 @@
                     ))}
                   </div>
                 </div>
+              )}
+
+              {isAddProjectModalOpen && (
+                  <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                          <div className="bg-gradient-to-r from-indigo-500 to-blue-600 p-5 text-white flex justify-between items-center">
+                              <h3 className="font-black text-xl"><i className="fa-solid fa-lightbulb mr-3"></i> 發想新專案</h3>
+                              <button onClick={() => setIsAddProjectModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                          </div>
+                          <div className="p-6 bg-slate-50 space-y-4">
+                              <div>
+                                  <label className="text-sm font-bold text-slate-600 block mb-1">專案名稱 *</label>
+                                  <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.title} onChange={(e) => setNewProject({...newProject, title: e.target.value})} placeholder="輸入新點子或專案名稱" />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-bold text-slate-600 block mb-1">初始狀態</label>
+                                  <select className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.status} onChange={(e) => setNewProject({...newProject, status: e.target.value})}>
+                                      {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                              </div>
+                              <div className="flex justify-end gap-3 mt-6">
+                                  <button onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
+                                  <button onClick={handleAddProjectSubmit} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">建立專案</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
               )}
 
               <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
