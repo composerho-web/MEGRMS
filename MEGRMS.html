@@ -148,6 +148,15 @@
             return Math.round((target - today) / (1000 * 60 * 60 * 24));
         };
 
+        const getDaysSince = (dateString) => {
+            if(!dateString) return 0;
+            const today = new Date(); today.setHours(0,0,0,0);
+            const target = new Date(dateString);
+            if(isNaN(target.getTime())) return 0;
+            target.setHours(0,0,0,0);
+            return Math.round((today - target) / (1000 * 60 * 60 * 24));
+        };
+
         const StatusBadge = ({ status }) => {
           let colors = "bg-gray-100 text-gray-600 border-gray-200";
           if (status.includes("發想")) colors = "bg-orange-100 text-orange-700 border-orange-300 shadow-orange-100";
@@ -155,6 +164,7 @@
           if (status.includes("施測") || status.includes("確認")) colors = "bg-sky-100 text-sky-700 border-sky-300 shadow-sky-100";
           if (status.includes("寫作中")) colors = "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300 shadow-fuchsia-100";
           if (status.includes("投稿") || status.includes("完成")) colors = "bg-emerald-100 text-emerald-700 border-emerald-300 shadow-emerald-100";
+          if (status.includes("終止")) colors = "bg-slate-200 text-slate-700 border-slate-400 shadow-slate-200 line-through opacity-70";
 
           return <span className={`px-3 py-1.5 rounded-2xl text-xs font-black shadow-sm border-2 ${colors} flex items-center w-fit`}>{status}</span>;
         };
@@ -367,7 +377,7 @@
 
             const stats = [
                 {label: '乘客總數', val: students.length, color: 'text-white', filter: 'students'},
-                {label: '專案總數', val: projects.length, color: 'text-white', filter: 'all_projects'},
+                {label: '活躍專案數', val: projects.length, color: 'text-white', filter: 'all_projects'},
                 {label: '研討會已投稿', val: confSubmitted, color: 'text-green-300', filter: '研討會已投稿'},
                 {label: '期刊已投稿', val: journalSubmitted, color: 'text-green-300', filter: '期刊已投稿'},
                 {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300', filter: 'PILOT完成'},
@@ -451,6 +461,7 @@
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
           const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
           const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
+          const [isTerminatedModalOpen, setIsTerminatedModalOpen] = useState(false); // 🌟 下車專案管理 Modal
 
           const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
           
@@ -478,8 +489,34 @@
           const [editingNoteStudentId, setEditingNoteStudentId] = useState(null);
           const [tempStudentNote, setTempStudentNote] = useState("");
 
-          const pendingApprovals = projects.filter(p => p.pendingStatus !== null);
-          const stagnantProjects = projects.filter(p => p.status.includes("概念發想") && p.pendingStatus === null);
+          // 🌟 全域篩選：分開「活躍中」與「已下車/終止」的專案
+          const activeProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)');
+          const terminatedProjects = projects.filter(p => p.status === '🛑 專案已終止 (下車)');
+
+          const pendingApprovals = activeProjects.filter(p => p.pendingStatus !== null);
+          
+          // 🌟 智能卡關警報系統 (包含詳細原因)
+          const getAlerts = (p) => {
+              let reasons = [];
+              if (p.pendingStatus !== null) return []; // 若正在等待審核，不視為卡關
+              
+              const daysToNext = calculateDaysLeft(p.nextStageDate);
+              if (daysToNext !== null && daysToNext < 0) {
+                  reasons.push(`預估進度已逾期 ${Math.abs(daysToNext)} 天`);
+              }
+              
+              const daysSinceUpdate = getDaysSince(p.lastUpdate);
+              if (p.status.includes('發想') && daysSinceUpdate > 14) {
+                  reasons.push(`概念發想已卡關超過 14 天`);
+              } else if (daysSinceUpdate > 30) {
+                  reasons.push(`超過一個月未更新狀態`);
+              }
+              return reasons;
+          };
+
+          const alertedProjects = activeProjects
+              .map(p => ({ ...p, alertReasons: getAlerts(p) }))
+              .filter(p => p.alertReasons.length > 0);
 
           const handleApproveInitiate = (project) => {
              const dateStr = new Date().toLocaleDateString('zh-TW');
@@ -503,7 +540,7 @@
                      updated = { 
                          ...project, status: pendingApprovalFlow.newStatus, pendingStatus: null, pendingDescription: null, 
                          lastUpdate: new Date().toISOString().split('T')[0], notes: notesText, hasUnreadMemo: true, 
-                         overdueEmailSent: false
+                         overdueEmailSent: false, lastPokeDate: null // 核准後清除提醒
                      };
                  } else { 
                      updated = { ...project, pendingStatus: null, pendingDescription: null, notes: notesText, hasUnreadMemo: true };
@@ -548,6 +585,42 @@
              alert("✅ 日期已成功修改，並已寫入備忘錄且通知學生！");
           };
 
+          // 🌟 終止/下車專案功能
+          const handleTerminateProject = (project) => {
+              const reason = prompt(`⚠️ 確定要將【${project.title}】設定為終止 (下車) 嗎？\n請輸入終止原因 (系統將自動寫入備忘錄)：`);
+              if (reason === null) return;
+              
+              const dateStr = new Date().toLocaleDateString('zh-TW');
+              const noteAppend = `<br><br><p><b><span style="color:#64748b">[${dateStr}] 🛑 專案已設定為終止 (下車)。</span></b><br>原因：${reason}</p>`;
+              
+              const updated = {
+                  ...project,
+                  status: '🛑 專案已終止 (下車)',
+                  pendingStatus: null,
+                  notes: (project.notes || '') + noteAppend,
+                  lastUpdate: new Date().toISOString().split('T')[0]
+              };
+              setProjects(projects.map(p => p.id === project.id ? updated : p));
+              syncToBackend('updateProject', updated);
+              alert("✅ 專案已終止並移至下車專案區！");
+          };
+
+          // 🌟 復原下車專案
+          const handleRestoreProject = (project) => {
+              const updated = { ...project, status: STATUSES[0], lastUpdate: new Date().toISOString().split('T')[0] };
+              setProjects(projects.map(p => p.id === project.id ? updated : p));
+              syncToBackend('updateProject', updated);
+              alert("✅ 專案已復原至發想階段！");
+          };
+
+          // 🌟 永久刪除專案 (軟刪除寫入資料庫，前端直接移除)
+          const handlePermanentDeleteProject = (project) => {
+              if(!confirm(`⚠️ 嚴重警告：確定要永久刪除【${project.title}】嗎？\n此動作將無法復原！`)) return;
+              const updated = { ...project, isDeleted: true };
+              setProjects(projects.filter(p => p.id !== project.id)); // 前端立刻移除
+              syncToBackend('updateProject', updated);
+          };
+
           const handleAddStudent = () => {
               if (!newStudent.name || !newStudent.email) return alert("姓名與登入用 Email 為必填！");
               const s = { id: 's' + Date.now(), ...newStudent };
@@ -579,7 +652,7 @@
              const updated = { ...project, lastPokeDate: today };
              setProjects(projects.map(p => p.id === projectId ? updated : p));
              syncToBackend('updateProject', updated);
-             alert("已送出提醒！學生將會在儀表板看到您的關注。");
+             alert("已送出提醒！警示將持續存在，直到學生送出進度更新為止。");
           };
 
           const handleUpdateMentors = (projectId, newMentors) => {
@@ -631,15 +704,15 @@
           // 衍生過濾後的專案
           let filteredProjectsToShow = [];
           if (activeFilter === 'all_projects') {
-              filteredProjectsToShow = projects;
+              filteredProjectsToShow = activeProjects;
           } else if (activeFilter && activeFilter !== 'students') {
-              filteredProjectsToShow = projects.filter(p => p.status.includes(activeFilter));
+              filteredProjectsToShow = activeProjects.filter(p => p.status.includes(activeFilter));
           }
 
           return (
             <div className="space-y-8 animate-fade-in pb-20">
               <AchievementDashboard 
-                  projects={projects} 
+                  projects={activeProjects} 
                   students={students} 
                   activeFilter={activeFilter} 
                   onFilterClick={setActiveFilter} 
@@ -700,6 +773,10 @@
                   <button onClick={() => setIsLinksModalOpen(true)} className="px-4 py-2.5 bg-emerald-100 text-emerald-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-link mr-2"></i> 連結管理</button>
                   <button onClick={() => setIsConfModalOpen(true)} className="px-4 py-2.5 bg-teal-100 text-teal-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-calendar-check mr-2"></i> 研討會</button>
                   <button onClick={openMarqueeManager} className="px-4 py-2.5 bg-indigo-100 text-indigo-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-tower-broadcast mr-2"></i> 廣播</button>
+                  <div className="w-0.5 bg-gray-200 mx-1"></div>
+                  <button onClick={() => setIsTerminatedModalOpen(true)} className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-2xl font-bold active:scale-95 hover:bg-slate-300 transition flex items-center">
+                      <i className="fa-solid fa-ghost mr-2"></i> 歷史下車專案 <span className="ml-2 bg-slate-400 text-white text-xs px-2 py-0.5 rounded-full">{terminatedProjects.length}</span>
+                  </button>
                 </div>
               </div>
 
@@ -733,20 +810,30 @@
 
                 <Card className="border-t-[6px] border-t-red-400 flex flex-col overflow-hidden">
                   <div className="p-5 border-b bg-gradient-to-r from-red-50 to-white">
-                    <h3 className="font-black text-xl text-red-900 flex items-center"><i className="fa-solid fa-triangle-exclamation text-red-500 mr-3 animate-pulse"></i> 卡關警報區</h3>
+                    <h3 className="font-black text-xl text-red-900 flex items-center"><i className="fa-solid fa-triangle-exclamation text-red-500 mr-3 animate-pulse"></i> 智能卡關警報區</h3>
                   </div>
                   <div className="p-5 flex-grow overflow-y-auto bg-slate-50/50" style={{maxHeight: '450px'}}>
                     <ul className="space-y-4">
-                      {stagnantProjects.length === 0 && <div className="text-center text-red-300 font-bold py-10">目前沒有卡關的專案！</div>}
-                      {stagnantProjects.map(project => (
+                      {alertedProjects.length === 0 && <div className="text-center text-red-300 font-bold py-10">目前沒有卡關或落後的專案！</div>}
+                      {alertedProjects.map(project => (
                         <li key={project.id} className="flex flex-col bg-white border-2 border-red-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition">
-                          <div className="flex items-center mb-3">
+                          <div className="flex items-center mb-2">
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-400 to-rose-500 text-white flex items-center justify-center font-black text-lg mr-3 shadow-sm">{project.studentName.charAt(0)}</div>
                             <div className="flex-grow overflow-hidden">
                               <div className="font-black text-slate-800 text-lg">{project.studentName}</div>
                               <div className="text-slate-500 text-xs truncate font-medium">{project.title}</div>
                             </div>
                           </div>
+                          
+                          {/* 顯示卡關原因 */}
+                          <div className="mb-3 flex flex-wrap gap-1">
+                              {project.alertReasons.map((reason, idx) => (
+                                  <span key={idx} className="bg-red-50 text-red-600 border border-red-200 text-[10px] font-black px-2 py-1 rounded-md">
+                                      {reason}
+                                  </span>
+                              ))}
+                          </div>
+
                           <div className="flex gap-2">
                             <button onClick={() => setEditingProjectNotes(project)} className="flex-1 text-indigo-700 bg-indigo-50 border border-indigo-100 font-bold py-2 rounded-xl active:scale-95"><i className="fa-solid fa-book-open mr-1"></i>備忘錄</button>
                             <button onClick={() => handlePoke(project.id)} className="flex-1 text-orange-700 bg-orange-50 border border-orange-100 font-bold py-2 rounded-xl active:scale-95 hover:bg-orange-500 hover:text-white transition"><i className="fa-solid fa-hand-point-right mr-1"></i>提醒一下</button>
@@ -769,8 +856,8 @@
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {students.map(student => {
-                      const studentProjects = projects.filter(p => p.studentId === student.id);
-                      const isStagnant = studentProjects.some(p => p.status.includes("概念發想") && p.pendingStatus === null);
+                      const studentProjects = activeProjects.filter(p => p.studentId === student.id);
+                      const isStagnant = alertedProjects.some(p => p.studentId === student.id);
                       const latestUpdate = studentProjects.length > 0 ? new Date(Math.max(...studentProjects.map(p => new Date(p.lastUpdate || 0)))) : null;
                       
                       return (
@@ -781,7 +868,7 @@
                               <div className="flex items-center flex-wrap gap-2">
                                   <span className="font-black text-xl text-slate-800">{student.name}</span>
                                   {student.degree && <span className="bg-indigo-100 text-indigo-700 text-xs font-black px-2 py-1 rounded-lg">{student.degree}</span>}
-                                  {isStagnant && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm animate-pulse">卡關</span>}
+                                  {isStagnant && <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm animate-pulse">卡關警報</span>}
                               </div>
                               
                               <div className="flex gap-1">
@@ -969,7 +1056,7 @@
                 </div>
               )}
 
-              {/* 🌟 專案管理 Modal */}
+              {/* 🌟 專案管理 Modal (管理學生的活躍專案) */}
               {manageStudentProjectsId && (
                 <div className="fixed inset-0 bg-indigo-900/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
                   <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border-4 border-indigo-100 animate-modal-pop">
@@ -984,12 +1071,18 @@
                     </div>
                     <div className="p-6 overflow-y-auto bg-slate-50 flex-grow">
                         <div className="space-y-6">
-                          {projects.filter(p => p.studentId === manageStudentProjectsId).length === 0 ? (
+                          {activeProjects.filter(p => p.studentId === manageStudentProjectsId).length === 0 ? (
                               <div className="text-center py-10 text-indigo-300 font-bold">這個車廂目前空空的，趕快點擊右上角新增一個專案吧！</div>
                           ) : (
-                              projects.filter(p => p.studentId === manageStudentProjectsId).map(project => (
-                                <div key={project.id} className="bg-white border-2 border-indigo-50 rounded-3xl p-6 shadow-sm">
-                                    <h4 className="font-black text-2xl text-slate-800 mb-3">{project.title}</h4>
+                              activeProjects.filter(p => p.studentId === manageStudentProjectsId).map(project => (
+                                <div key={project.id} className="bg-white border-2 border-indigo-50 rounded-3xl p-6 shadow-sm relative group">
+                                    
+                                    {/* 下車/終止按鈕 */}
+                                    <button onClick={() => handleTerminateProject(project)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl flex items-center justify-center transition shadow-sm" title="設定為終止(下車)">
+                                        <i className="fa-solid fa-power-off"></i>
+                                    </button>
+
+                                    <h4 className="font-black text-2xl text-slate-800 mb-3 pr-12">{project.title}</h4>
                                     
                                     <div className="mb-4 text-sm font-black text-indigo-700 flex items-center gap-2 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 w-fit">
                                         <i className="fa-solid fa-user-graduate text-indigo-500"></i> 指導學長姐/專家：
@@ -1047,6 +1140,39 @@
                 </div>
               )}
 
+              {/* 🌟 歷史/下車專案 Modal (獨立區塊) */}
+              {isTerminatedModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[75] p-4 animate-fade-in">
+                  <div className="bg-slate-100 rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border-4 border-slate-300 animate-modal-pop">
+                    <div className="bg-slate-700 p-5 text-white flex justify-between items-center">
+                      <h3 className="font-black text-xl"><i className="fa-solid fa-ghost mr-3"></i> 歷史下車專案管理區</h3>
+                      <button onClick={() => setIsTerminatedModalOpen(false)} className="hover:rotate-90 transition-all w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-grow">
+                        <div className="space-y-4">
+                          {terminatedProjects.length === 0 ? (
+                              <div className="text-center py-10 text-slate-400 font-bold text-lg"><i className="fa-regular fa-folder-open text-4xl mb-3 block"></i>目前沒有下車的專案。</div>
+                          ) : (
+                              terminatedProjects.map(project => (
+                                <div key={project.id} className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm opacity-90 hover:opacity-100 transition">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <h4 className="font-black text-xl text-slate-700"><span className="bg-slate-200 text-slate-600 px-3 py-1 rounded-xl text-sm mr-3">{project.studentName}</span>{project.title}</h4>
+                                        <StatusBadge status={project.status} />
+                                    </div>
+                                    <div className="flex gap-3 mt-4 pt-4 border-t-2 border-slate-50">
+                                        <button onClick={() => setEditingProjectNotes(project)} className="flex-1 bg-slate-200 text-slate-700 font-black py-2.5 rounded-xl hover:bg-slate-300 transition active:scale-95"><i className="fa-solid fa-clock-rotate-left mr-2"></i>查看歷史備忘錄</button>
+                                        <button onClick={() => handleRestoreProject(project)} className="flex-1 bg-emerald-100 text-emerald-700 font-black py-2.5 rounded-xl hover:bg-emerald-200 transition active:scale-95"><i className="fa-solid fa-trash-can-arrow-up mr-2"></i>復原專案</button>
+                                        <button onClick={() => handlePermanentDeleteProject(project)} className="flex-1 bg-rose-100 text-rose-600 font-black py-2.5 rounded-xl hover:bg-rose-500 hover:text-white transition active:scale-95"><i className="fa-solid fa-skull-crossbones mr-2"></i>永久刪除</button>
+                                    </div>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 🌟 新增專案小 Modal */}
               {isAddProjectModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
@@ -1084,7 +1210,10 @@
         const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
           if (!student) return <div className="text-center py-20"><i className="fa-solid fa-train-subway text-6xl text-indigo-400 mb-6 animate-bounce-soft"></i></div>;
 
-          const myProjects = projects.filter(p => p.studentId === student.id);
+          // 🌟 學生端也分離活躍與下車專案
+          const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
+          const myTerminatedProjects = projects.filter(p => p.studentId === student.id && p.status === '🛑 專案已終止 (下車)');
+
           const [draftStatuses, setDraftStatuses] = useState({});
           const [draftDescriptions, setDraftDescriptions] = useState({});
           const [draftNextDates, setDraftNextDates] = useState({}); 
@@ -1094,7 +1223,7 @@
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
 
           useEffect(() => {
-              myProjects.forEach(p => {
+              myActiveProjects.forEach(p => {
                   if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !p.pendingStatus) {
                       const daysLeft = calculateDaysLeft(p.nextStageDate);
                       if (daysLeft !== null && daysLeft < 0) {
@@ -1104,7 +1233,7 @@
                       }
                   }
               });
-          }, [myProjects.length]);
+          }, [myActiveProjects.length]);
 
           const handleSubmitRequest = (projectId, currentStatus) => {
             const newStatus = draftStatuses[projectId];
@@ -1117,7 +1246,8 @@
             const project = projects.find(p => p.id === projectId);
             const updatedProject = { 
                 ...project, pendingStatus: newStatus, pendingDescription: newDesc, nextStageDate: newDate, 
-                isNewProgressUpdate: true, systemUrl: window.location.href, overdueEmailSent: false
+                isNewProgressUpdate: true, systemUrl: window.location.href, overdueEmailSent: false,
+                lastPokeDate: null // 🌟 學生送出更新後，自動清除老師的「提醒一下」警示
             };
 
             setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
@@ -1138,7 +1268,7 @@
 
           return (
             <div className="space-y-8 animate-fade-in pb-20">
-              <AchievementDashboard projects={projects} students={students} />
+              <AchievementDashboard projects={projects.filter(p=>p.status!=='🛑 專案已終止 (下車)')} students={students} />
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                  <AnnouncementsBoard announcements={announcements} />
@@ -1153,15 +1283,16 @@
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {myProjects.map(project => {
+                {myActiveProjects.map(project => {
                    const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
                    const daysToNext = calculateDaysLeft(project.nextStageDate);
 
                    return (
                   <Card key={project.id} className="relative flex flex-col border-t-[8px] border-t-indigo-400 overflow-visible mt-6">
+                    {/* 🌟 持續存在的老師提醒 */}
                     {project.lastPokeDate && (
-                        <div className="absolute -top-12 left-0 w-full bg-rose-500 text-white font-black p-3 rounded-t-2xl shadow-lg flex items-center justify-center animate-bounce z-0">
-                            <i className="fa-solid fa-hand-point-right mr-2 text-xl"></i> 老師在 {formatDate(project.lastPokeDate)} 關注了此專案，請盡快更新進度！
+                        <div className="absolute -top-12 left-0 w-full bg-rose-500 text-white font-black p-3 rounded-t-2xl shadow-lg flex items-center justify-center animate-pulse z-0 border-2 border-rose-600">
+                            <i className="fa-solid fa-hand-point-right mr-2 text-xl fa-bounce"></i> 老師在 {formatDate(project.lastPokeDate)} 關注了此專案，請盡快送出進度更新！
                         </div>
                     )}
 
@@ -1223,6 +1354,25 @@
                   </Card>
                 )})}
               </div>
+              
+              {/* 🌟 學生端的歷史專案區塊 */}
+              {myTerminatedProjects.length > 0 && (
+                <div className="mt-16 bg-slate-100 p-8 rounded-[2rem] border-4 border-white shadow-inner">
+                  <h3 className="text-xl font-black text-slate-500 mb-6 flex items-center">
+                      <i className="fa-solid fa-ghost mr-3"></i> 已下車 / 終止的專案紀錄
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-75 grayscale hover:grayscale-0 transition duration-500">
+                    {myTerminatedProjects.map(project => (
+                        <div key={project.id} className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <h4 className="font-black text-lg text-slate-700 mb-2">{project.title}</h4>
+                            <StatusBadge status={project.status} />
+                            <button onClick={() => setEditingProjectNotes(project)} className="w-full mt-4 bg-slate-200 text-slate-600 font-black py-2 rounded-xl hover:bg-slate-300 transition"><i className="fa-solid fa-book-open mr-2"></i>查看最終備忘錄</button>
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
             </div>
           );
@@ -1239,7 +1389,9 @@
 
           useEffect(() => {
             fetch(GAS_API_URL).then(res => res.json()).then(data => {
-                if(data.students) setStudents(data.students); if(data.projects) setProjects(data.projects);
+                if(data.students) setStudents(data.students); 
+                // 🌟 過濾掉已永久刪除的資料 (確保不進入 React 狀態中)
+                if(data.projects) setProjects(data.projects.filter(p => p.isDeleted !== true && p.isDeleted !== 'true'));
                 if(data.config && data.config.length > 0) {
                   const marqueeConf = data.config.find(c => c.key === 'marqueeText'); if (marqueeConf) setMarqueeText(marqueeConf.value);
                   const confConfig = data.config.find(c => c.key === 'conferencesList'); if (confConfig && confConfig.value) try { setConferences(JSON.parse(confConfig.value)); } catch(e) {}
