@@ -1143,6 +1143,14 @@
           const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
           const [isLoading, setIsLoading] = useState(true);
 
+          const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
+          const [tempMarquee, setTempMarquee] = useState("");
+
+          const openMarqueeManager = () => {
+              setTempMarquee(marqueeText);
+              setIsMarqueeModalOpen(true);
+          };
+
           useEffect(() => {
             let isMounted = true;
             
@@ -1204,13 +1212,47 @@
                       </button>
                   </div>
               </header>
+
+              {/* 🌟 補回跑馬燈動畫顯示區域 */}
+              {marqueeText && (
+                  <div className="bg-indigo-600 text-white text-sm font-bold py-2 overflow-hidden shadow-inner flex relative z-30">
+                       <div className="px-4 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap">
+                           <i className="fa-solid fa-tower-broadcast fa-fade mr-2"></i> 列車廣播
+                       </div>
+                       <div className="whitespace-nowrap animate-marquee flex-1">{marqueeText}</div>
+                  </div>
+              )}
+
               <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full z-10">
                 {currentUser.role === 'teacher' ? 
-                  <TeacherDashboard projects={projects} setProjects={setProjects} students={students} setStudents={setStudents} conferences={conferences} setConferences={setConferences} announcements={announcements} setAnnouncements={setAnnouncements} usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} /> 
+                  <TeacherDashboard projects={projects} setProjects={setProjects} students={students} setStudents={setStudents} conferences={conferences} setConferences={setConferences} announcements={announcements} setAnnouncements={setAnnouncements} usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} openMarqueeManager={openMarqueeManager} /> 
                   : 
                   <StudentWorkspace student={currentUser.studentData} students={students} setStudents={setStudents} projects={projects} setProjects={setProjects} conferences={conferences} announcements={announcements} usefulLinks={usefulLinks} />
                 }
               </main>
+
+              {/* 🌟 補回跑馬燈編輯視窗 Modal */}
+              {isMarqueeModalOpen && (
+                  <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 text-white flex justify-between items-center">
+                              <h3 className="font-black text-xl"><i className="fa-solid fa-tower-broadcast mr-3"></i> 設定全站跑馬燈廣播</h3>
+                              <button onClick={() => setIsMarqueeModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                          </div>
+                          <div className="p-6 bg-slate-50">
+                              <textarea className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white font-bold resize-none focus:border-indigo-400" rows="3" placeholder="請輸入廣播訊息..." value={tempMarquee} onChange={(e) => setTempMarquee(e.target.value)}></textarea>
+                              <div className="flex justify-end gap-3 mt-4">
+                                  <button onClick={() => setIsMarqueeModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
+                                  <button onClick={() => {
+                                      setMarqueeText(tempMarquee);
+                                      syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });
+                                      setIsMarqueeModalOpen(false);
+                                  }} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">更新廣播</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
             </div>
           );
         };
