@@ -1472,14 +1472,19 @@
                 <div>
                   <h2 className="text-3xl font-black text-indigo-900 tracking-tight flex items-center"><i className="fa-solid fa-ticket text-indigo-400 mr-3 text-2xl -rotate-12"></i> Hi, {student.name}</h2>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
+                  {student.contactLink && (
+                      <button onClick={() => window.open(student.contactLink, '_blank')} className="px-5 py-2.5 bg-sky-100 text-sky-600 font-black rounded-xl hover:bg-sky-200 active:scale-95 transition flex items-center shadow-sm">
+                          <i className="fa-brands fa-facebook-messenger mr-2 text-lg"></i> 私訊指導教授
+                      </button>
+                  )}
                   <a href="mailto:composerho@gmail.com" className="px-5 py-2.5 bg-blue-100 text-blue-700 font-black rounded-xl hover:bg-blue-200 active:scale-95 transition flex items-center shadow-sm">
-                      <i className="fa-solid fa-envelope mr-2"></i> 聯繫指導教授
+                      <i className="fa-solid fa-envelope mr-2"></i> Email 聯繫
                   </a>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
                 {myActiveProjects.map(project => {
                    const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
                    const daysToNext = calculateDaysLeft(project.nextStageDate);
@@ -1563,11 +1568,11 @@
                   </Card>
                 )})}
                 
-                {/* 🌟 學生專屬的發想新專案按鈕 */}
-                <Card className="border-dashed border-4 border-indigo-200 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-400 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-600 transition cursor-pointer group min-h-[300px] mt-6" onClick={() => setIsAddProjectModalOpen(true)}>
-                    <i className="fa-solid fa-circle-plus text-5xl mb-4 group-hover:scale-110 transition-transform"></i>
-                    <span className="font-black text-xl">發想新專案</span>
-                    <span className="text-sm font-bold opacity-70 mt-2">點擊開啟新旅程</span>
+                {/* 🌟 學生專屬的發想新專案按鈕（已強化顯示與動畫） */}
+                <Card className="border-dashed border-4 border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-500 hover:bg-indigo-100 hover:border-indigo-500 hover:text-indigo-700 transition cursor-pointer group min-h-[350px] mt-6 shadow-sm" onClick={() => setIsAddProjectModalOpen(true)}>
+                    <i className="fa-solid fa-circle-plus text-6xl mb-4 group-hover:scale-110 group-hover:rotate-90 transition-all duration-300"></i>
+                    <span className="font-black text-2xl">發想新專案</span>
+                    <span className="text-sm font-bold opacity-80 mt-3 text-indigo-400">點擊此處開啟新旅程</span>
                 </Card>
               </div>
               
