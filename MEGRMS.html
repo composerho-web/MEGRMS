@@ -271,7 +271,7 @@
                 setIsLoading(true);
 
                 try {
-                    // 根據 Canvas 環境規則，不包含 API Key
+                    // API Key 需由執行環境或使用者補上
                     const apiKey = ""; 
                     
                     // 清理並精簡專案資料，避免傳送過多無用標籤
@@ -611,7 +611,7 @@ ${JSON.stringify(cleanProjects)}`;
             const journalWriting = projects.filter(p => p.status.includes('寫作中')).length;
 
             const stats = [
-                {label: '乘客總數', val: students.length, color: 'text-white', filter: 'students'},
+                {label: '乘客總數', val: students ? students.length : 0, color: 'text-white', filter: 'students'},
                 {label: '活躍專案數', val: projects.length, color: 'text-white', filter: 'all_projects'},
                 {label: '遊戲發展中', val: gameDev, color: 'text-yellow-300', filter: '發展中'},
                 {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300', filter: 'PILOT完成'},
@@ -729,7 +729,7 @@ ${JSON.stringify(cleanProjects)}`;
           const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
           const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
           const [isTerminatedModalOpen, setIsTerminatedModalOpen] = useState(false); 
-          const [isAIOpen, setIsAIOpen] = useState(false); // 🌟 新增：AI 助理開關狀態
+          const [isAIOpen, setIsAIOpen] = useState(false);
 
           const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
           
@@ -1178,7 +1178,6 @@ ${JSON.stringify(cleanProjects)}`;
               </div>
 
               <div className="flex flex-wrap justify-between items-center bg-white/90 backdrop-blur-md p-5 rounded-[2rem] shadow-sm border-2 border-white gap-4 relative overflow-hidden">
-                {/* 🌟 智能助理背景特效 */}
                 <div className="absolute right-0 top-0 w-64 h-full bg-gradient-to-l from-purple-100/50 to-transparent pointer-events-none"></div>
 
                 <h2 className="text-2xl font-black text-indigo-900 flex items-center tracking-wide"><i className="fa-solid fa-gamepad text-indigo-500 mr-3 text-3xl"></i> 列車長控制台</h2>
@@ -1189,7 +1188,6 @@ ${JSON.stringify(cleanProjects)}`;
                   <button onClick={openMarqueeManager} className="px-4 py-2.5 bg-indigo-100 text-indigo-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-tower-broadcast mr-2"></i> 廣播</button>
                   <div className="w-0.5 bg-gray-200 mx-1 hidden md:block"></div>
                   
-                  {/* 🌟 新增：智能助理按鈕 */}
                   <button onClick={() => setIsAIOpen(true)} className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-2xl font-black active:scale-95 shadow-md flex items-center group overflow-hidden relative">
                       <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
                       <i className="fa-solid fa-sparkles mr-2 animate-pulse"></i> 問問 Gemini AI
@@ -1958,7 +1956,470 @@ ${JSON.stringify(cleanProjects)}`;
             </div>
           );
         };
-        const root = ReactDOM.createRoot(document.getElementById('root')); root.render(<App />);
+
+        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
+          if (!student) return <div className="text-center py-20"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-6 animate-bounce-soft object-contain opacity-60 grayscale" /></div>;
+
+          const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
+          const myTerminatedProjects = projects.filter(p => p.studentId === student.id && p.status === '🛑 專案已終止 (下車)');
+
+          const [draftStatuses, setDraftStatuses] = useState({});
+          const [draftDescriptions, setDraftDescriptions] = useState({});
+          const [draftNextDates, setDraftNextDates] = useState({}); 
+          const [editingProjectNotes, setEditingProjectNotes] = useState(null);
+          
+          const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+          const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0], initialDescription: '' });
+          
+          const [isAIOpen, setIsAIOpen] = useState(false); // AI 助理開關 (學生端)
+
+          const handleAddProjectSubmit = () => {
+              if(!newProject.title) return alert("請輸入專案名稱！");
+              
+              if (!newProject.initialDescription || newProject.initialDescription.trim().length < 10) {
+                  return alert("初步說明至少需要填寫 10 個字喔！");
+              }
+
+              const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b><br>初步說明：${newProject.initialDescription}</p>`;
+              const isConfAccepted = newProject.status.includes('研討會已被接受');
+              const isJournalAccepted = newProject.status.includes('期刊已被接受');
+
+              const p = {
+                  id: 'p' + Date.now(),
+                  studentId: student.id,
+                  studentName: student.name,
+                  title: newProject.title,
+                  status: newProject.status,
+                  lastUpdate: new Date().toISOString().split('T')[0],
+                  pendingStatus: null,
+                  notes: initialNote,
+                  hasConfAccepted: isConfAccepted,
+                  hasJournalAccepted: isJournalAccepted
+              };
+              const updated = [...projects, p];
+              setProjects(updated);
+              syncToBackend('addProject', p);
+              setIsAddProjectModalOpen(false);
+              setNewProject({ title: '', status: STATUSES[0], initialDescription: '' });
+          };
+
+          useEffect(() => {
+              myActiveProjects.forEach(p => {
+                  if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !isStatusPending(p.pendingStatus)) {
+                      const daysLeft = calculateDaysLeft(p.nextStageDate);
+                      if (daysLeft !== null && daysLeft < 0) {
+                          const updated = {...p, overdueEmailSent: true};
+                          setProjects(prev => prev.map(proj => proj.id === p.id ? updated : proj));
+                      }
+                  }
+              });
+          }, [myActiveProjects.length]);
+
+          const handleSubmitRequest = (projectId, currentStatus) => {
+            const newStatus = draftStatuses[projectId];
+            const newDesc = draftDescriptions[projectId] || '';
+            const newDate = draftNextDates[projectId];
+
+            if (!newStatus || newStatus === currentStatus) return;
+            if (!newDate) return alert("🚨 請務必設定「預估抵達下個階段的日期」喔！");
+
+            const project = projects.find(p => p.id === projectId);
+            const updatedProject = { 
+                ...project, pendingStatus: newStatus, pendingDescription: newDesc, nextStageDate: newDate, 
+                isNewProgressUpdate: true, systemUrl: window.location.href, overdueEmailSent: false,
+                lastPokeDate: null 
+            };
+
+            setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
+            syncToBackend('updateProject', updatedProject);
+            
+            setDraftStatuses(prev => { const n={...prev}; delete n[projectId]; return n; });
+            setDraftDescriptions(prev => { const n={...prev}; delete n[projectId]; return n; });
+            setDraftNextDates(prev => { const n={...prev}; delete n[projectId]; return n; });
+          };
+
+          const handleMarkMemoAsRead = (projectId) => {
+             const project = projects.find(p => p.id === projectId);
+             if (project && (project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true')) {
+                 const updated = { ...project, hasUnreadMemo: false };
+                 setProjects(projects.map(p => p.id === projectId ? updated : p)); syncToBackend('updateProject', updated);
+             }
+          };
+
+          return (
+            <div className="space-y-8 animate-fade-in pb-20">
+              <AchievementDashboard 
+                  projects={projects.filter(p=>p.status!=='🛑 專案已終止 (下車)')} 
+                  allProjects={projects} 
+                  students={students} 
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                 <AnnouncementsBoard announcements={announcements} />
+                 <ConferencesBoard conferences={conferences} />
+                 <UsefulLinksBoard links={usefulLinks} />
+              </div>
+
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/80 backdrop-blur-md p-6 rounded-[2rem] border-2 border-white shadow-sm mb-8 gap-4">
+                <div>
+                  <h2 className="text-3xl font-black text-indigo-900 tracking-tight flex items-center"><i className="fa-solid fa-ticket text-indigo-400 mr-3 text-2xl -rotate-12"></i> Hi, {student.name}</h2>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={() => setIsAIOpen(true)} className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-black rounded-xl hover:shadow-lg active:scale-95 transition flex items-center shadow-sm">
+                      <i className="fa-solid fa-sparkles mr-2 animate-pulse"></i> 問問 Gemini AI
+                  </button>
+                  {student.contactLink && (
+                      <button onClick={() => window.open(student.contactLink, '_blank')} className="px-5 py-2.5 bg-sky-100 text-sky-600 font-black rounded-xl hover:bg-sky-200 active:scale-95 transition flex items-center shadow-sm">
+                          <i className="fa-brands fa-facebook-messenger mr-2 text-lg"></i> 私訊指導教授
+                      </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+                {myActiveProjects.map(project => {
+                   const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
+                   const daysToNext = calculateDaysLeft(project.nextStageDate);
+
+                   return (
+                  <Card key={project.id} className="relative flex flex-col border-t-[8px] border-t-indigo-400 overflow-visible mt-6">
+                    {project.lastPokeDate && (
+                        <div className="absolute -top-12 left-0 w-full bg-rose-500 text-white font-black p-3 rounded-t-2xl shadow-lg flex items-center justify-center animate-pulse z-0 border-2 border-rose-600">
+                            <i className="fa-solid fa-hand-point-right mr-2 text-xl fa-bounce"></i> 老師在 {formatDate(project.lastPokeDate)} 關注了此專案，請盡快送出進度更新！
+                        </div>
+                    )}
+
+                    {isStatusPending(project.pendingStatus) && (
+                      <div className="absolute -top-4 -right-4 bg-orange-500 text-white text-sm font-black px-4 py-2 rounded-2xl shadow-lg flex items-center animate-bounce border-4 border-white z-50">
+                        <i className="fa-solid fa-hourglass-half mr-2 fa-spin-pulse"></i> 老師審核中
+                      </div>
+                    )}
+
+                    <div className="p-6 md:p-8 flex-grow flex flex-col bg-white rounded-3xl relative z-10">
+                      <h3 className="font-black text-2xl text-slate-800 leading-tight mb-3">{project.title}</h3>
+                      
+                      {project.mentors && (
+                          <div className="text-sm font-black text-indigo-600 mb-4 flex items-center bg-indigo-50 w-fit px-3 py-1.5 rounded-lg border border-indigo-100">
+                              <i className="fa-solid fa-user-graduate mr-2"></i>指導學長姐/專家：{project.mentors}
+                          </div>
+                      )}
+
+                      <div className="mb-4"><StatusBadge status={project.status} /></div>
+
+                      <button onClick={() => setEditingProjectNotes(project)} className={`w-full mb-6 py-3 font-black rounded-2xl border-[3px] transition-all shadow-sm flex justify-center items-center group active:scale-95 ${isUnread ? 'bg-rose-50 text-rose-600 border-rose-300 animate-pulse' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}>
+                         <i className={`fa-solid fa-book-open mr-2 text-lg ${isUnread ? 'text-rose-500' : 'group-hover:text-indigo-500'}`}></i> 開啟專案備忘錄 
+                         {isUnread && <span className="ml-3 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow tracking-widest">NEW 指示!</span>}
+                      </button>
+
+                      <div className="bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 mt-auto shadow-inner">
+                        <label className="text-base font-black text-slate-700 block mb-3 flex items-center"><i className="fa-solid fa-bolt mr-2 text-yellow-500"></i> 更新進度狀態：</label>
+                        <div className="flex flex-col gap-4">
+                          {(() => {
+                              const isPending = isStatusPending(project.pendingStatus);
+                              const displayStatus = isPending ? project.pendingStatus : (draftStatuses[project.id] || project.status);
+                              return (
+                                  <>
+                                      <select 
+                                        className={`w-full p-3 border-2 rounded-xl font-bold transition-colors outline-none focus:border-indigo-400 ${isPending ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`} 
+                                        value={displayStatus} 
+                                        onChange={(e) => setDraftStatuses({...draftStatuses, [project.id]: e.target.value})} 
+                                        disabled={isPending}
+                                      >
+                                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                      
+                                      {!draftStatuses[project.id] && !isPending && project.nextStageDate && (
+                                          <div className={`p-3 rounded-xl border-2 font-black text-sm flex items-center ${daysToNext !== null && daysToNext < 0 ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' : daysToNext !== null && daysToNext <= 14 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                              <i className="fa-regular fa-calendar-check mr-2"></i> 
+                                              預估抵達下個階段：{formatDate(project.nextStageDate)} 
+                                              {daysToNext !== null && <span className="ml-2">({daysToNext < 0 ? '已逾期！' : `剩餘 ${daysToNext} 天`})</span>}
+                                          </div>
+                                      )}
+                                      
+                                      {draftStatuses[project.id] && draftStatuses[project.id] !== project.status && !isPending && (
+                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200 shadow-sm animate-fade-in relative mt-2">
+                                          <label className="text-sm font-black text-rose-600 block mb-2"><i className="fa-solid fa-calendar-days mr-1"></i> 預估抵達下個階段的日期 *</label>
+                                          <input type="date" className="w-full p-3 border-2 border-rose-200 rounded-xl bg-white font-bold mb-4 text-rose-700 outline-none focus:border-rose-400" value={draftNextDates[project.id] || ''} onChange={(e) => setDraftNextDates({...draftNextDates, [project.id]: e.target.value})} />
+
+                                          <label className="text-sm font-black text-indigo-900 block mb-2">給老師的話 <span className="text-indigo-400 font-bold">(選填)</span></label>
+                                          <textarea className="w-full text-sm p-3 border-2 border-white rounded-xl focus:border-indigo-400 bg-white mb-3 resize-none font-medium" rows="2" value={draftDescriptions[project.id] || ''} onChange={(e) => setDraftDescriptions({...draftDescriptions, [project.id]: e.target.value})}></textarea>
+                                          
+                                          <div className="flex justify-end">
+                                            <button onClick={() => handleSubmitRequest(project.id, project.status)} className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 active:scale-95 flex items-center shadow-md">
+                                              <i className="fa-solid fa-paper-plane mr-2"></i> 送出審核並通知老師
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                  </>
+                              );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )})}
+                
+                <Card className="border-dashed border-4 border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-500 hover:bg-indigo-100 hover:border-indigo-500 hover:text-indigo-700 transition cursor-pointer group min-h-[350px] mt-6 shadow-sm" onClick={() => setIsAddProjectModalOpen(true)}>
+                    <i className="fa-solid fa-circle-plus text-6xl mb-4 group-hover:scale-110 group-hover:rotate-90 transition-all duration-300"></i>
+                    <span className="font-black text-2xl">發想新專案</span>
+                    <span className="text-sm font-bold opacity-80 mt-3 text-indigo-400">點擊此處開啟新旅程</span>
+                </Card>
+              </div>
+              
+              {myTerminatedProjects.length > 0 && (
+                <div className="mt-16 bg-slate-100 p-8 rounded-[2rem] border-4 border-white shadow-inner">
+                  <h3 className="text-xl font-black text-slate-500 mb-6 flex items-center">
+                      <i className="fa-solid fa-ghost mr-3"></i> 已下車 / 終止的專案紀錄
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-75 grayscale hover:grayscale-0 transition duration-500">
+                    {myTerminatedProjects.map(project => (
+                        <div key={project.id} className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <h4 className="font-black text-lg text-slate-700 mb-2">{project.title}</h4>
+                            <StatusBadge status={project.status} />
+                            <button onClick={() => setEditingProjectNotes(project)} className="w-full mt-4 bg-slate-200 text-slate-600 font-black py-2 rounded-xl hover:bg-slate-300 transition"><i className="fa-solid fa-book-open mr-2"></i>查看最終備忘錄</button>
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isAddProjectModalOpen && (
+                  <ModalPortal>
+                      <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                              <div className="bg-gradient-to-r from-indigo-500 to-blue-600 p-5 text-white flex justify-between items-center">
+                                  <h3 className="font-black text-xl"><i className="fa-solid fa-lightbulb mr-3"></i> 發想新專案</h3>
+                                  <button onClick={() => setIsAddProjectModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                              </div>
+                              <div className="p-6 bg-slate-50 space-y-4">
+                                  <div>
+                                      <label className="text-sm font-bold text-slate-600 block mb-1">專案名稱 *</label>
+                                      <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.title} onChange={(e) => setNewProject({...newProject, title: e.target.value})} placeholder="輸入新點子或專案名稱" />
+                                  </div>
+                                  <div>
+                                      <label className="text-sm font-bold text-slate-600 block mb-1">初始狀態</label>
+                                      <select className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.status} onChange={(e) => setNewProject({...newProject, status: e.target.value})}>
+                                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="text-sm font-bold text-slate-600 block mb-1">初步說明 (至少10字) *</label>
+                                      <textarea className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-medium resize-none focus:border-indigo-400" rows="3" value={newProject.initialDescription} onChange={(e) => setNewProject({...newProject, initialDescription: e.target.value})} placeholder="請輸入至少10個字的初步說明，這將作為最初始的備忘錄資料..."></textarea>
+                                  </div>
+                                  <div className="flex justify-end gap-3 mt-6">
+                                      <button onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
+                                      <button onClick={handleAddProjectSubmit} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">建立專案</button>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </ModalPortal>
+              )}
+
+              {/* 🌟 AI 智能助理視窗元件 */}
+              <AIAssistantModal 
+                  isOpen={isAIOpen} 
+                  onClose={() => setIsAIOpen(false)} 
+                  projects={projects} 
+                  students={students} 
+              />
+
+              <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
+            </div>
+          );
+        };
+
+        const App = () => {
+          const [currentUser, setCurrentUser] = useState(null); 
+          const TEACHER_EMAIL = "composerho@gmail.com"; 
+          
+          const [students, setStudents] = useState([]); const [projects, setProjects] = useState([]);
+          const [conferences, setConferences] = useState([]); const [announcements, setAnnouncements] = useState([]); const [usefulLinks, setUsefulLinks] = useState([]);
+          const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
+          const [isLoading, setIsLoading] = useState(true);
+
+          const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
+          const [tempMarquee, setTempMarquee] = useState("");
+          
+          const [showCelebration, setShowCelebration] = useState(false);
+          const [hasCelebrated, setHasCelebrated] = useState(false);
+
+          const openMarqueeManager = () => {
+              setTempMarquee(marqueeText);
+              setIsMarqueeModalOpen(true);
+          };
+
+          useEffect(() => {
+              const overlay = document.getElementById('bg-overlay');
+              if (overlay) {
+                  if (currentUser && currentUser.role !== 'unauthorized') {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-white/40 backdrop-blur-[4px]";
+                  } else {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-transparent backdrop-blur-none";
+                  }
+              }
+          }, [currentUser]);
+
+          useEffect(() => {
+              if (currentUser && currentUser.role !== 'unauthorized' && projects.length > 0 && !hasCelebrated) {
+                  const relevantProjects = currentUser.role === 'teacher' ? projects : projects.filter(p => p.studentId === currentUser.studentData.id);
+                  
+                  const hasRecentAcceptance = relevantProjects.some(p => {
+                      if (!p.acceptedDate) return false;
+                      if (!p.status.includes('已被接受')) return false; 
+                      
+                      const diffDays = (new Date() - new Date(p.acceptedDate)) / (1000 * 60 * 60 * 24);
+                      return diffDays >= 0 && diffDays <= 3; 
+                  });
+
+                  if (hasRecentAcceptance) {
+                      setHasCelebrated(true); 
+                      setShowCelebration(true);
+                      
+                      const duration = 4000;
+                      const end = Date.now() + duration;
+
+                      const frame = () => {
+                          if (window.confetti) {
+                              window.confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
+                              window.confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
+                          }
+                          if (Date.now() < end) {
+                              requestAnimationFrame(frame);
+                          }
+                      };
+                      frame();
+
+                      setTimeout(() => {
+                          setShowCelebration(false);
+                      }, 5000);
+                  }
+              }
+          }, [currentUser, projects, hasCelebrated]);
+
+          useEffect(() => {
+            let isMounted = true;
+            
+            const timer = setTimeout(() => {
+                if(isMounted) setIsLoading(false);
+            }, 3000);
+
+            fetch(GAS_API_URL).then(res => res.json()).then(data => {
+                if (!isMounted) return;
+                if(data.students) setStudents(data.students); 
+                if(data.projects) setProjects(data.projects.filter(p => p.isDeleted !== true && p.isDeleted !== 'true'));
+                if(data.config && data.config.length > 0) {
+                  const marqueeConf = data.config.find(c => c.key === 'marqueeText'); if (marqueeConf) setMarqueeText(marqueeConf.value);
+                  const confConfig = data.config.find(c => c.key === 'conferencesList'); if (confConfig && confConfig.value) try { setConferences(JSON.parse(confConfig.value)); } catch(e) {}
+                  const annConfig = data.config.find(c => c.key === 'announcementsList'); if (annConfig && annConfig.value) try { setAnnouncements(JSON.parse(annConfig.value)); } catch(e) {}
+                  const linkConfig = data.config.find(c => c.key === 'usefulLinksList'); if (linkConfig && linkConfig.value) try { setUsefulLinks(JSON.parse(linkConfig.value)); } catch(e) {}
+                }
+                clearTimeout(timer);
+                setIsLoading(false);
+              }).catch(err => {
+                console.error("載入失敗：", err);
+                if(isMounted) setIsLoading(false);
+              });
+
+              return () => { isMounted = false; };
+          }, []);
+
+          if (isLoading) return <div className="min-h-screen flex items-center justify-center flex-col z-10"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 animate-bounce-soft mb-6 object-contain drop-shadow-2xl" /><h2 className="text-2xl font-black text-indigo-900 bg-white/80 px-6 py-2 rounded-full shadow-sm">列車啟動中...</h2></div>;
+
+          const handleLogin = (email, name, picture) => {
+            const userEmail = email.toLowerCase().trim();
+            if (userEmail === TEACHER_EMAIL.toLowerCase().trim()) return setCurrentUser({ email: userEmail, name, picture, role: 'teacher', studentData: null });
+            const foundStudent = students.find(s => s.email && s.email.toLowerCase().trim() === userEmail);
+            if (foundStudent) return setCurrentUser({ email: userEmail, name: foundStudent.name, picture, role: 'student', studentData: foundStudent });
+            setCurrentUser({ email: userEmail, name, picture, role: 'unauthorized', studentData: null });
+          };
+
+          if (!currentUser) return <LoginScreen onLoginSuccess={handleLogin} />;
+          if (currentUser.role === 'unauthorized') return <div className="min-h-screen flex items-center justify-center text-xl font-black text-rose-500 bg-white/80 z-20 absolute inset-0">未授權的乘客，無法進入車廂。</div>;
+
+          return (
+            <div className="min-h-screen flex flex-col z-10 relative">
+              {showCelebration && (
+                  <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-[100] animate-fade-in transition-opacity duration-1000">
+                      <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 drop-shadow-[0_10px_20px_rgba(236,72,153,0.5)] animate-bounce-soft tracking-widest text-center px-4 leading-tight">
+                          🎉 恭喜新論文被接受~ 🎊
+                      </h1>
+                  </div>
+              )}
+
+              <header className="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex justify-between items-center">
+                  <h1 className="text-2xl font-black text-indigo-900 flex items-center">
+                      <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS
+                      <span className="hidden lg:inline-block ml-4 text-[10px] bg-rose-50 text-rose-600 px-3 py-1 rounded-lg font-black tracking-widest border border-rose-100">(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</span>
+                  </h1>
+                  
+                  <div className="flex items-center gap-4">
+                      <div className="hidden sm:flex items-center bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
+                          {currentUser.picture ? (
+                              <img src={currentUser.picture} className="w-8 h-8 rounded-full mr-2 shadow-sm border-2 border-white" alt="avatar" />
+                          ) : (
+                              <div className="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold mr-2 border-2 border-white">{currentUser.name.charAt(0)}</div>
+                          )}
+                          <span className="font-bold text-indigo-900 text-sm">{currentUser.name}</span>
+                          <span className="text-xs text-indigo-500 ml-2 font-black bg-indigo-100 px-2 py-0.5 rounded-md">{currentUser.role === 'teacher' ? '列車長' : '乘客'}</span>
+                      </div>
+                      <button onClick={() => { setCurrentUser(null); if(window.changeBackground) window.changeBackground(); }} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-rose-100 hover:text-rose-600 transition shadow-sm">
+                          <i className="fa-solid fa-right-from-bracket mr-1"></i> 登出
+                      </button>
+                  </div>
+              </header>
+
+              {marqueeText && (
+                  <div className="bg-indigo-600 text-white text-lg font-black py-3 overflow-hidden shadow-inner flex relative z-30">
+                       <div className="px-5 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap tracking-wide">
+                           <i className="fa-solid fa-tower-broadcast fa-fade mr-3 text-xl"></i> 列車廣播
+                       </div>
+                       <div className="whitespace-nowrap animate-marquee flex-1 flex items-center tracking-wide">{marqueeText}</div>
+                  </div>
+              )}
+
+              <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full z-10 relative">
+                {currentUser.role === 'teacher' ? 
+                  <TeacherDashboard projects={projects} setProjects={setProjects} students={students} setStudents={setStudents} conferences={conferences} setConferences={setConferences} announcements={announcements} setAnnouncements={setAnnouncements} usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} openMarqueeManager={openMarqueeManager} /> 
+                  : 
+                  <StudentWorkspace student={currentUser.studentData} students={students} setStudents={setStudents} projects={projects} setProjects={setProjects} conferences={conferences} announcements={announcements} usefulLinks={usefulLinks} />
+                }
+              </main>
+              
+              <footer className="text-center py-6 text-sm font-black text-slate-500/70 z-10 relative mt-auto">
+                 <p>(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</p>
+              </footer>
+
+              {isMarqueeModalOpen && (
+                  <ModalPortal>
+                      <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 text-white flex justify-between items-center">
+                                  <h3 className="font-black text-xl"><i className="fa-solid fa-tower-broadcast mr-3"></i> 設定全站跑馬燈廣播</h3>
+                                  <button onClick={() => setIsMarqueeModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                              </div>
+                              <div className="p-6 bg-slate-50">
+                                  <textarea className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white font-bold resize-none focus:border-indigo-400" rows="3" placeholder="請輸入廣播訊息..." value={tempMarquee} onChange={(e) => setTempMarquee(e.target.value)}></textarea>
+                                  <div className="flex justify-end gap-3 mt-4">
+                                      <button onClick={() => setIsMarqueeModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
+                                      <button onClick={() => {
+                                          setMarqueeText(tempMarquee);
+                                          syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });
+                                          setIsMarqueeModalOpen(false);
+                                      }} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">更新廣播</button>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </ModalPortal>
+              )}
+            </div>
+          );
+        };
+        
+        const root = ReactDOM.createRoot(document.getElementById('root')); 
+        root.render(<App />);
     </script>
 </body>
 </html>
