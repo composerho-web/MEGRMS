@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- 🌟 加入灑花特效與 Markdown 渲染所需的函式庫 -->
+    <!-- 加入灑花特效與 Markdown 渲染所需的函式庫 -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
@@ -78,7 +78,6 @@
     </style>
 </head>
 <body class="text-gray-800 relative">
-    <!-- 底層背景圖 -->
     <div id="main-bg" class="bg-shapes"></div>
     
     <script>
@@ -191,7 +190,7 @@
           });
         };
 
-        // 🌟 指數退避重試的 API Fetch 工具 (給 Gemini API 使用)
+        // 🌟 更新：改良的 Fetch 工具，遇到 403 會提早結束不浪費時間重試
         const fetchWithRetry = async (url, options, retries = 5) => {
             const delays = [1000, 2000, 4000, 8000, 16000];
             for (let i = 0; i < retries; i++) {
@@ -199,11 +198,15 @@
                     const res = await fetch(url, options);
                     if (!res.ok) {
                         const errData = await res.json().catch(() => ({}));
-                        throw new Error(`HTTP error! status: ${res.status}, msg: ${errData.error?.message || 'Unknown'}`);
+                        const errMsg = `HTTP error! status: ${res.status}, msg: ${errData.error?.message || 'Unknown'}`;
+                        if (res.status === 403 || res.status === 400) {
+                            throw new Error(errMsg); 
+                        }
+                        throw new Error(errMsg);
                     }
                     return await res.json();
                 } catch (err) {
-                    if (i === retries - 1) throw err;
+                    if (i === retries - 1 || err.message.includes('403') || err.message.includes('400')) throw err;
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
                 }
             }
@@ -249,18 +252,24 @@
           </div>
         );
 
-        // 🌟 新增：MEG 智能助理對話視窗元件
-        const AIAssistantModal = ({ isOpen, onClose, projects, students }) => {
+        // 🌟 更新：MEG 智能助理加入 API Key 設定介面
+        const AIAssistantModal = ({ isOpen, onClose, projects, students, geminiApiKey, setGeminiApiKey }) => {
             const [query, setQuery] = useState('');
             const [chatHistory, setChatHistory] = useState([
                 { role: 'ai', text: '嗨！我是 **MEG 列車長智能助理** 🤖✨\n\n我已經讀取了系統中所有的專案資料、更新日期以及備忘錄內容。您可以問我任何問題，例如：\n* 「幫我整理有哪些專案目前進度落後？」\n* 「備忘錄裡面提到轉投或退稿的專案有哪幾個？」\n* 「請列出下個禮拜死線即將到期的專案。」\n\n請問有什麼我可以幫忙的嗎？' }
             ]);
             const [isLoading, setIsLoading] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [tempKey, setTempKey] = useState(geminiApiKey || '');
             const chatEndRef = useRef(null);
 
             useEffect(() => {
+                setTempKey(geminiApiKey || '');
+            }, [geminiApiKey]);
+
+            useEffect(() => {
                 if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-            }, [chatHistory, isLoading, isOpen]);
+            }, [chatHistory, isLoading, isOpen, showSettings]);
 
             const handleAsk = async () => {
                 if (!query.trim() || isLoading) return;
@@ -270,11 +279,18 @@
                 setChatHistory(prev => [...prev, { role: 'user', text: userText }]);
                 setIsLoading(true);
 
+                // 系統預設環境變數 (Canvas 專用)
+                const apiKey = ""; 
+                // 最終採用的 Key (若使用者有填寫，優先採用使用者的)
+                const finalApiKey = geminiApiKey || apiKey;
+
+                if (!finalApiKey) {
+                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **缺少 API Key**\n\n系統偵測到您尚未設定 Gemini API Key，因此無法發送請求。\n請點擊視窗右上角的「⚙️ 齒輪」圖示進行設定。` }]);
+                    setIsLoading(false);
+                    return;
+                }
+
                 try {
-                    // API Key 需由執行環境或使用者補上
-                    const apiKey = ""; 
-                    
-                    // 清理並精簡專案資料，避免傳送過多無用標籤
                     const cleanProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)').map(p => ({
                         專案名稱: p.title,
                         負責乘客: p.studentName,
@@ -282,7 +298,7 @@
                         上次更新時間: p.lastUpdate,
                         預估下階段日期: p.nextStageDate,
                         指導人員: p.mentors,
-                        備忘錄與註記內容: extractText(p.notes) // 剝離 HTML
+                        備忘錄與註記內容: extractText(p.notes) 
                     }));
 
                     const systemPrompt = `你是一個 MEG 研究室進度管理系統的專業 AI 助理「MEG 列車長副手」。
@@ -299,7 +315,7 @@ ${JSON.stringify(cleanProjects)}`;
                         systemInstruction: { parts: [{ text: systemPrompt }] }
                     };
 
-                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${finalApiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -309,7 +325,11 @@ ${JSON.stringify(cleanProjects)}`;
                     setChatHistory(prev => [...prev, { role: 'ai', text: aiText }]);
                 } catch (err) {
                     console.error("Gemini API Error:", err);
-                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ 發生錯誤，無法連接到 Gemini AI。\n\n詳細錯誤：${err.message}\n(若您是在本機離線執行，此功能需要正確設定 API 環境)` }]);
+                    let errorMsg = `⚠️ 發生錯誤，無法連接到 Gemini AI。\n\n詳細錯誤：${err.message}`;
+                    if (err.message.includes('403') || err.message.includes('unregistered')) {
+                        errorMsg = `⚠️ **API Key 無效或未授權 (403 錯誤)**\n\n這通常是因為您尚未設定 API Key，或者填寫的 Key 不正確。\n👉 請點擊上方「⚙️ 齒輪」圖示輸入您的 Google Gemini API Key。`;
+                    }
+                    setChatHistory(prev => [...prev, { role: 'ai', text: errorMsg }]);
                 } finally {
                     setIsLoading(false);
                 }
@@ -335,9 +355,45 @@ ${JSON.stringify(cleanProjects)}`;
                                     <i className="fa-solid fa-sparkles mr-3 text-yellow-300 animate-pulse"></i> 
                                     智能助理 (Gemini)
                                 </h3>
-                                <button onClick={onClose} className="hover:rotate-90 hover:scale-110 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setShowSettings(!showSettings)} className={`hover:scale-110 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full ${showSettings ? 'bg-white text-pink-600' : 'bg-white/20'}`} title="API Key 設定">
+                                        <i className="fa-solid fa-gear"></i>
+                                    </button>
+                                    <button onClick={onClose} className="hover:rotate-90 hover:scale-110 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
+                                </div>
                             </div>
                             
+                            {/* 🌟 API 設定區塊 */}
+                            {showSettings && (
+                                <div className="bg-fuchsia-50 p-5 border-b-2 border-fuchsia-100 animate-fade-in shadow-inner">
+                                    <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
+                                        <i className="fa-solid fa-key mr-2 text-fuchsia-500"></i> 設定 Gemini API Key
+                                    </label>
+                                    <p className="text-xs text-fuchsia-700 mb-3 font-bold leading-relaxed">
+                                        若您要在自己的伺服器上使用，必須提供 API Key。<br/>
+                                        此 Key 將安全儲存在您的 GAS 資料庫中。<br/>
+                                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 underline hover:text-pink-600"><i className="fa-solid fa-arrow-up-right-from-square mr-1"></i>點此免費申請 Google API Key</a>
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="password" 
+                                            placeholder="AIzaSy..." 
+                                            className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none" 
+                                            value={tempKey} 
+                                            onChange={e => setTempKey(e.target.value)} 
+                                        />
+                                        <button onClick={() => {
+                                            setGeminiApiKey(tempKey);
+                                            syncToBackend('updateConfig', { key: 'geminiApiKey', value: tempKey });
+                                            setShowSettings(false);
+                                            alert('✅ API Key 已成功儲存至您的資料庫！');
+                                        }} className="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-500 text-white rounded-xl font-black shadow-sm active:scale-95 transition-transform hover:shadow-md">
+                                            儲存
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Chat History */}
                             <div className="flex-grow p-5 overflow-y-auto bg-slate-50 flex flex-col gap-4 thin-scrollbar">
                                 {chatHistory.map((msg, idx) => (
@@ -722,7 +778,7 @@ ${JSON.stringify(cleanProjects)}`;
           );
         };
 
-        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager }) => {
+        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager, geminiApiKey, setGeminiApiKey }) => {
           
           const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
@@ -1504,12 +1560,13 @@ ${JSON.stringify(cleanProjects)}`;
                   </Card>
               </div>
 
-              {/* 🌟 AI 智能助理視窗元件 */}
               <AIAssistantModal 
                   isOpen={isAIOpen} 
                   onClose={() => setIsAIOpen(false)} 
                   projects={projects} 
                   students={students} 
+                  geminiApiKey={geminiApiKey}
+                  setGeminiApiKey={setGeminiApiKey}
               />
 
               <ProjectNotesModal 
@@ -1957,7 +2014,7 @@ ${JSON.stringify(cleanProjects)}`;
           );
         };
 
-        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
+        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks, geminiApiKey, setGeminiApiKey }) => {
           if (!student) return <div className="text-center py-20"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-6 animate-bounce-soft object-contain opacity-60 grayscale" /></div>;
 
           const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
@@ -2217,12 +2274,13 @@ ${JSON.stringify(cleanProjects)}`;
                   </ModalPortal>
               )}
 
-              {/* 🌟 AI 智能助理視窗元件 */}
               <AIAssistantModal 
                   isOpen={isAIOpen} 
                   onClose={() => setIsAIOpen(false)} 
                   projects={projects} 
                   students={students} 
+                  geminiApiKey={geminiApiKey}
+                  setGeminiApiKey={setGeminiApiKey}
               />
 
               <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
@@ -2238,6 +2296,9 @@ ${JSON.stringify(cleanProjects)}`;
           const [conferences, setConferences] = useState([]); const [announcements, setAnnouncements] = useState([]); const [usefulLinks, setUsefulLinks] = useState([]);
           const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
           const [isLoading, setIsLoading] = useState(true);
+
+          // 🌟 全域狀態：儲存 Gemini API Key
+          const [geminiApiKey, setGeminiApiKey] = useState("");
 
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
           const [tempMarquee, setTempMarquee] = useState("");
@@ -2314,6 +2375,9 @@ ${JSON.stringify(cleanProjects)}`;
                   const confConfig = data.config.find(c => c.key === 'conferencesList'); if (confConfig && confConfig.value) try { setConferences(JSON.parse(confConfig.value)); } catch(e) {}
                   const annConfig = data.config.find(c => c.key === 'announcementsList'); if (annConfig && annConfig.value) try { setAnnouncements(JSON.parse(annConfig.value)); } catch(e) {}
                   const linkConfig = data.config.find(c => c.key === 'usefulLinksList'); if (linkConfig && linkConfig.value) try { setUsefulLinks(JSON.parse(linkConfig.value)); } catch(e) {}
+                  
+                  // 🌟 讀取 Gemini API Key
+                  const geminiConf = data.config.find(c => c.key === 'geminiApiKey'); if (geminiConf) setGeminiApiKey(geminiConf.value);
                 }
                 clearTimeout(timer);
                 setIsLoading(false);
@@ -2381,9 +2445,25 @@ ${JSON.stringify(cleanProjects)}`;
 
               <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full z-10 relative">
                 {currentUser.role === 'teacher' ? 
-                  <TeacherDashboard projects={projects} setProjects={setProjects} students={students} setStudents={setStudents} conferences={conferences} setConferences={setConferences} announcements={announcements} setAnnouncements={setAnnouncements} usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} openMarqueeManager={openMarqueeManager} /> 
+                  <TeacherDashboard 
+                      projects={projects} setProjects={setProjects} 
+                      students={students} setStudents={setStudents} 
+                      conferences={conferences} setConferences={setConferences} 
+                      announcements={announcements} setAnnouncements={setAnnouncements} 
+                      usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} 
+                      openMarqueeManager={openMarqueeManager}
+                      geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey}
+                  /> 
                   : 
-                  <StudentWorkspace student={currentUser.studentData} students={students} setStudents={setStudents} projects={projects} setProjects={setProjects} conferences={conferences} announcements={announcements} usefulLinks={usefulLinks} />
+                  <StudentWorkspace 
+                      student={currentUser.studentData} 
+                      students={students} setStudents={setStudents} 
+                      projects={projects} setProjects={setProjects} 
+                      conferences={conferences} 
+                      announcements={announcements} 
+                      usefulLinks={usefulLinks} 
+                      geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey}
+                  />
                 }
               </main>
               
