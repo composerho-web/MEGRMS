@@ -253,7 +253,7 @@
         );
 
         // 🌟 更新：MEG 智能助理加入 API Key 設定介面
-        const AIAssistantModal = ({ isOpen, onClose, projects, students, geminiApiKey, setGeminiApiKey }) => {
+        const AIAssistantModal = ({ isOpen, onClose, projects, students, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
             const [query, setQuery] = useState('');
             const [chatHistory, setChatHistory] = useState([
                 { role: 'ai', text: '嗨！我是 **MEG 列車長智能助理** 🤖✨\n\n我已經讀取了系統中所有的專案資料、更新日期以及備忘錄內容。您可以問我任何問題，例如：\n* 「幫我整理有哪些專案目前進度落後？」\n* 「備忘錄裡面提到轉投或退稿的專案有哪幾個？」\n* 「請列出下個禮拜死線即將到期的專案。」\n\n請問有什麼我可以幫忙的嗎？' }
@@ -261,7 +261,13 @@
             const [isLoading, setIsLoading] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
             const [tempKey, setTempKey] = useState(geminiApiKey || '');
+            const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash-latest');
             const chatEndRef = useRef(null);
+
+            useEffect(() => {
+                setTempKey(geminiApiKey || '');
+                setTempModel(geminiModel || 'gemini-1.5-flash-latest');
+            }, [geminiApiKey, geminiModel]);
 
             useEffect(() => {
                 setTempKey(geminiApiKey || '');
@@ -315,7 +321,8 @@ ${JSON.stringify(cleanProjects)}`;
                         systemInstruction: { parts: [{ text: systemPrompt }] }
                     };
 
-                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalApiKey}`, {
+                    const targetModel = geminiModel || 'gemini-1.5-flash-latest';
+                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${finalApiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -374,7 +381,7 @@ ${JSON.stringify(cleanProjects)}`;
                                         此 Key 將安全儲存在您的 GAS 資料庫中。<br/>
                                         <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 underline hover:text-pink-600"><i className="fa-solid fa-arrow-up-right-from-square mr-1"></i>點此免費申請 Google API Key</a>
                                     </p>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 mb-3">
                                         <input 
                                             type="password" 
                                             placeholder="AIzaSy..." 
@@ -382,12 +389,29 @@ ${JSON.stringify(cleanProjects)}`;
                                             value={tempKey} 
                                             onChange={e => setTempKey(e.target.value)} 
                                         />
+                                    </div>
+                                    <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
+                                        <i className="fa-solid fa-cube mr-2 text-fuchsia-500"></i> 選擇 AI 模型
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <select 
+                                            className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none"
+                                            value={tempModel}
+                                            onChange={e => setTempModel(e.target.value)}
+                                        >
+                                            <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (預設穩定版)</option>
+                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (最新版)</option>
+                                            <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (進階版)</option>
+                                            <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash-8B (輕量版)</option>
+                                        </select>
                                         <button onClick={() => {
                                             setGeminiApiKey(tempKey);
+                                            setGeminiModel(tempModel);
                                             syncToBackend('updateConfig', { key: 'geminiApiKey', value: tempKey });
+                                            syncToBackend('updateConfig', { key: 'geminiModel', value: tempModel });
                                             setShowSettings(false);
-                                            alert('✅ API Key 已成功儲存至您的資料庫！');
-                                        }} className="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-500 text-white rounded-xl font-black shadow-sm active:scale-95 transition-transform hover:shadow-md">
+                                            alert('✅ API 設定已成功儲存至您的資料庫！');
+                                        }} className="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-500 text-white rounded-xl font-black shadow-sm active:scale-95 transition-transform hover:shadow-md whitespace-nowrap">
                                             儲存
                                         </button>
                                     </div>
@@ -778,7 +802,7 @@ ${JSON.stringify(cleanProjects)}`;
           );
         };
 
-        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager, geminiApiKey, setGeminiApiKey }) => {
+        const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
           
           const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
@@ -1567,6 +1591,8 @@ ${JSON.stringify(cleanProjects)}`;
                   students={students} 
                   geminiApiKey={geminiApiKey}
                   setGeminiApiKey={setGeminiApiKey}
+                  geminiModel={geminiModel}
+                  setGeminiModel={setGeminiModel}
               />
 
               <ProjectNotesModal 
@@ -2014,7 +2040,7 @@ ${JSON.stringify(cleanProjects)}`;
           );
         };
 
-        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks, geminiApiKey, setGeminiApiKey }) => {
+        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
           if (!student) return <div className="text-center py-20"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-6 animate-bounce-soft object-contain opacity-60 grayscale" /></div>;
 
           const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
@@ -2281,6 +2307,8 @@ ${JSON.stringify(cleanProjects)}`;
                   students={students} 
                   geminiApiKey={geminiApiKey}
                   setGeminiApiKey={setGeminiApiKey}
+                  geminiModel={geminiModel}
+                  setGeminiModel={setGeminiModel}
               />
 
               <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
@@ -2297,8 +2325,9 @@ ${JSON.stringify(cleanProjects)}`;
           const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
           const [isLoading, setIsLoading] = useState(true);
 
-          // 🌟 全域狀態：儲存 Gemini API Key
+          // 🌟 全域狀態：儲存 Gemini API Key 與 模型
           const [geminiApiKey, setGeminiApiKey] = useState("");
+          const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash-latest");
 
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
           const [tempMarquee, setTempMarquee] = useState("");
@@ -2376,8 +2405,9 @@ ${JSON.stringify(cleanProjects)}`;
                   const annConfig = data.config.find(c => c.key === 'announcementsList'); if (annConfig && annConfig.value) try { setAnnouncements(JSON.parse(annConfig.value)); } catch(e) {}
                   const linkConfig = data.config.find(c => c.key === 'usefulLinksList'); if (linkConfig && linkConfig.value) try { setUsefulLinks(JSON.parse(linkConfig.value)); } catch(e) {}
                   
-                  // 🌟 讀取 Gemini API Key
+                  // 🌟 讀取 Gemini API Key 與 模型
                   const geminiConf = data.config.find(c => c.key === 'geminiApiKey'); if (geminiConf) setGeminiApiKey(geminiConf.value);
+                  const geminiModelConf = data.config.find(c => c.key === 'geminiModel'); if (geminiModelConf) setGeminiModel(geminiModelConf.value);
                 }
                 clearTimeout(timer);
                 setIsLoading(false);
@@ -2453,6 +2483,7 @@ ${JSON.stringify(cleanProjects)}`;
                       usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} 
                       openMarqueeManager={openMarqueeManager}
                       geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey}
+                      geminiModel={geminiModel} setGeminiModel={setGeminiModel}
                   /> 
                   : 
                   <StudentWorkspace 
@@ -2463,6 +2494,7 @@ ${JSON.stringify(cleanProjects)}`;
                       announcements={announcements} 
                       usefulLinks={usefulLinks} 
                       geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey}
+                      geminiModel={geminiModel} setGeminiModel={setGeminiModel}
                   />
                 }
               </main>
