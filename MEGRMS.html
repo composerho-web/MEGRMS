@@ -315,7 +315,7 @@ ${JSON.stringify(cleanProjects)}`;
                         systemInstruction: { parts: [{ text: systemPrompt }] }
                     };
 
-                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${finalApiKey}`, {
+                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalApiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -445,7 +445,7 @@ ${JSON.stringify(cleanProjects)}`;
                                     </button>
                                 </div>
                                 <div className="text-center mt-2 text-[10px] font-bold text-slate-400">
-                                    由 Google Gemini 2.5 AI 驅動，回答僅供參考。
+                                    由 Google Gemini 1.5 AI 驅動，回答僅供參考。
                                 </div>
                             </div>
                         </div>
