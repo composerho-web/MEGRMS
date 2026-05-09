@@ -13,7 +13,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- 🌟 加入灑花特效所需的函式庫 -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <style>
@@ -66,7 +65,6 @@
     </style>
 </head>
 <body class="text-gray-800">
-    <!-- 底層背景圖 -->
     <div id="main-bg" class="bg-shapes"></div>
     
     <script>
@@ -217,7 +215,6 @@
             const editorRef = useRef(null);
 
             useEffect(() => {
-                // 如果是唯讀模式，或是內容與現在的值不同，就進行更新（用於編輯舊資料時載入內容）
                 if (editorRef.current && !readOnly) {
                     if(editorRef.current.innerHTML !== initialValue && initialValue !== undefined) { 
                         editorRef.current.innerHTML = initialValue || ''; 
@@ -408,11 +405,19 @@
           </Card>
         );
 
-        const AchievementDashboard = ({ projects, students, activeFilter, onFilterClick }) => {
+        // 🌟 更新 AchievementDashboard，加入 allProjects 來實現絕對累計
+        const AchievementDashboard = ({ projects, allProjects, students, activeFilter, onFilterClick }) => {
+            const dataSource = allProjects || projects; // 確保取得所有專案包含已終止
+
+            const isConfAcc = (p) => p.status.includes('研討會已被接受') || p.hasConfAccepted === true || (p.notes && p.notes.includes('研討會已被接受'));
+            const isJourAcc = (p) => p.status.includes('期刊已被接受') || p.hasJournalAccepted === true || (p.notes && p.notes.includes('期刊已被接受'));
+
             const confSubmitted = projects.filter(p => p.status.includes('研討會已投稿')).length;
-            const confAccepted = projects.filter(p => p.status.includes('研討會已被接受')).length;
             const journalSubmitted = projects.filter(p => p.status.includes('期刊已投稿')).length;
-            const journalAccepted = projects.filter(p => p.status.includes('期刊已被接受')).length;
+            
+            // 🌟 採用 dataSource 來計算曾經達標的累計數量
+            const confAccepted = dataSource.filter(p => isConfAcc(p)).length;
+            const journalAccepted = dataSource.filter(p => isJourAcc(p)).length;
             
             const pilotCompleted = projects.filter(p => p.status.includes('PILOT完成')).length;
             const gameDev = projects.filter(p => p.status.includes('發展中')).length;
@@ -562,14 +567,12 @@
           const [editingLinkId, setEditingLinkId] = useState(null);
           const [editLinkData, setEditLinkData] = useState({});
 
-          // 🌟 公告編輯的 State
           const [editingAnnId, setEditingAnnId] = useState(null);
           const [editAnnTitle, setEditAnnTitle] = useState("");
           const [editAnnContent, setEditAnnContent] = useState("");
 
           const [activeFilter, setActiveFilter] = useState(null);
 
-          // 🌟 乘客排序與過濾器的 State
           const [studentSortBy, setStudentSortBy] = useState('default');
           const [studentFilterDegree, setStudentFilterDegree] = useState('all');
           const uniqueDegrees = [...new Set(students.map(s => s.degree).filter(Boolean))];
@@ -604,11 +607,14 @@
               .map(p => ({ ...p, alertReasons: getAlerts(p) }))
               .filter(p => p.alertReasons.length > 0);
 
+          // 🌟 在更新狀態時，同時寫入 Boolean 以實現永久累計
           const handleApprove = (project) => {
               if(!confirm(`✅ 確定要核准【${project.title}】的進度為「${project.pendingStatus}」嗎？\n(系統將自動寫入備忘錄並變更狀態)`)) return;
               
               const dateStr = new Date().toLocaleDateString('zh-TW');
               
+              const isConfAccepted = project.pendingStatus.includes('研討會已被接受') || project.hasConfAccepted === true;
+              const isJournalAccepted = project.pendingStatus.includes('期刊已被接受') || project.hasJournalAccepted === true;
               const isAccepted = project.pendingStatus.includes('已被接受');
 
               const updated = { 
@@ -620,6 +626,8 @@
                   hasUnreadMemo: true, 
                   overdueEmailSent: false, 
                   lastPokeDate: null,
+                  hasConfAccepted: isConfAccepted,
+                  hasJournalAccepted: isJournalAccepted,
                   ...(isAccepted && !project.acceptedDate ? { acceptedDate: new Date().toISOString() } : {}) 
               };
               updated.notes = (project.notes || '') + `<br><br><p><b><span style="color:#059669">[${dateStr}] ✅ 老師已核准進度變更為：「${project.pendingStatus}」。</span></b></p>`;
@@ -740,12 +748,17 @@
               const student = students.find(s => s.id === manageStudentProjectsId);
               
               const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已由列車長建立。</b><br>初步說明：${newProjectForStudent.initialDescription}</p>`;
+              
+              const isConfAccepted = newProjectForStudent.status.includes('研討會已被接受');
+              const isJournalAccepted = newProjectForStudent.status.includes('期刊已被接受');
 
               const p = { 
                   id: 'p' + Date.now(), studentId: manageStudentProjectsId, studentName: student.name, 
                   title: newProjectForStudent.title, status: newProjectForStudent.status, mentors: newProjectForStudent.mentors,
                   lastUpdate: new Date().toISOString().split('T')[0], pendingStatus: null,
-                  notes: initialNote 
+                  notes: initialNote,
+                  hasConfAccepted: isConfAccepted,
+                  hasJournalAccepted: isJournalAccepted
               };
               const updated = [...projects, p];
               setProjects(updated);
@@ -831,15 +844,20 @@
             }
           };
 
-          // 🌟 計算過濾後的專案
+          // 🌟 確保累積制在過濾時也能正確列出專案
           let filteredProjectsToShow = [];
           if (activeFilter === 'all_projects') {
               filteredProjectsToShow = activeProjects;
           } else if (activeFilter && activeFilter !== 'students') {
-              filteredProjectsToShow = activeProjects.filter(p => p.status.includes(activeFilter));
+              if (activeFilter === '研討會已被接受') {
+                  filteredProjectsToShow = activeProjects.filter(p => p.status.includes('研討會已被接受') || p.hasConfAccepted === true || (p.notes && p.notes.includes('研討會已被接受')));
+              } else if (activeFilter === '期刊已被接受') {
+                  filteredProjectsToShow = activeProjects.filter(p => p.status.includes('期刊已被接受') || p.hasJournalAccepted === true || (p.notes && p.notes.includes('期刊已被接受')));
+              } else {
+                  filteredProjectsToShow = activeProjects.filter(p => p.status.includes(activeFilter));
+              }
           }
 
-          // 🌟 處理乘客清單的排序與過濾
           let displayedStudents = [...students];
           if (studentFilterDegree !== 'all') {
               displayedStudents = displayedStudents.filter(s => s.degree === studentFilterDegree);
@@ -856,13 +874,14 @@
               } else if (studentSortBy === 'degree') {
                   return (a.degree || '').localeCompare(b.degree || '');
               }
-              return 0; // 預設排序 (加入順序)
+              return 0; 
           });
 
           return (
             <div className="space-y-8 animate-fade-in pb-20">
               <AchievementDashboard 
                   projects={activeProjects} 
+                  allProjects={projects}
                   students={students} 
                   activeFilter={activeFilter} 
                   onFilterClick={setActiveFilter} 
@@ -997,7 +1016,6 @@
                 </Card>
               </div>
 
-              {/* 🌟 乘客名單區塊 - 加上過濾器 */}
               <div className="pt-8">
                   <div className="flex flex-col md:flex-row justify-between items-end mb-6 gap-4 border-b-2 border-indigo-100 pb-4">
                       <div className="w-full md:w-auto">
@@ -1064,7 +1082,6 @@
                               </div>
                           </div>
 
-                          {/* 🌟 重新設計的專案清單與狀態區塊 */}
                           <div className="mb-4 bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100 flex flex-col relative group">
                               <div className="flex justify-between items-center mb-2">
                                   <span className="text-xs font-black text-indigo-800 flex items-center tracking-wide">
@@ -1316,7 +1333,7 @@
                   </div>
               )}
 
-              {/* 🌟 修改此處：支援編輯公告 */}
+              {/* 🌟 編輯公告區塊 */}
               {isAnnouncementsModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col animate-modal-pop border-4 border-white h-[80vh]">
@@ -1503,10 +1520,13 @@
                                                       <label className="text-xs font-bold text-slate-500 mb-1 block">強制更改狀態 (無須審核)</label>
                                                       <select className="w-full p-2 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold text-sm" value={p.status} onChange={(e) => {
                                                           const newStatus = e.target.value;
+                                                          const isConfAccepted = newStatus.includes('研討會已被接受') || p.hasConfAccepted === true;
+                                                          const isJournalAccepted = newStatus.includes('期刊已被接受') || p.hasJournalAccepted === true;
                                                           const isAccepted = newStatus.includes('已被接受');
                                                           
                                                           const updated = {
                                                               ...p, status: newStatus, pendingStatus: null, lastUpdate: new Date().toISOString().split('T')[0],
+                                                              hasConfAccepted: isConfAccepted, hasJournalAccepted: isJournalAccepted,
                                                               ...(isAccepted && !p.acceptedDate ? { acceptedDate: new Date().toISOString() } : {})
                                                           };
                                                           setProjects(projects.map(proj => proj.id === p.id ? updated : proj));
@@ -1565,6 +1585,8 @@
               }
 
               const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b><br>初步說明：${newProject.initialDescription}</p>`;
+              const isConfAccepted = newProject.status.includes('研討會已被接受');
+              const isJournalAccepted = newProject.status.includes('期刊已被接受');
 
               const p = {
                   id: 'p' + Date.now(),
@@ -1574,7 +1596,9 @@
                   status: newProject.status,
                   lastUpdate: new Date().toISOString().split('T')[0],
                   pendingStatus: null,
-                  notes: initialNote
+                  notes: initialNote,
+                  hasConfAccepted: isConfAccepted,
+                  hasJournalAccepted: isJournalAccepted
               };
               const updated = [...projects, p];
               setProjects(updated);
@@ -1628,7 +1652,11 @@
 
           return (
             <div className="space-y-8 animate-fade-in pb-20">
-              <AchievementDashboard projects={projects.filter(p=>p.status!=='🛑 專案已終止 (下車)')} students={students} />
+              <AchievementDashboard 
+                  projects={projects.filter(p=>p.status!=='🛑 專案已終止 (下車)')} 
+                  allProjects={projects} 
+                  students={students} 
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                  <AnnouncementsBoard announcements={announcements} />
@@ -1933,12 +1961,13 @@
                   </div>
               </header>
 
+              {/* 🌟 跑馬燈字體加大加粗 */}
               {marqueeText && (
-                  <div className="bg-indigo-600 text-white text-sm font-bold py-2 overflow-hidden shadow-inner flex relative z-30">
-                       <div className="px-4 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap">
-                           <i className="fa-solid fa-tower-broadcast fa-fade mr-2"></i> 列車廣播
+                  <div className="bg-indigo-600 text-white text-lg font-black py-3 overflow-hidden shadow-inner flex relative z-30">
+                       <div className="px-5 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap tracking-wide">
+                           <i className="fa-solid fa-tower-broadcast fa-fade mr-3 text-xl"></i> 列車廣播
                        </div>
-                       <div className="whitespace-nowrap animate-marquee flex-1">{marqueeText}</div>
+                       <div className="whitespace-nowrap animate-marquee flex-1 flex items-center tracking-wide">{marqueeText}</div>
                   </div>
               )}
 
