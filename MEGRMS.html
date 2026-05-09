@@ -13,6 +13,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
+    <!-- 🌟 加入灑花特效所需的函式庫 -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <style>
@@ -65,6 +66,7 @@
     </style>
 </head>
 <body class="text-gray-800 relative">
+    <!-- 底層背景圖 -->
     <div id="main-bg" class="bg-shapes"></div>
     
     <script>
@@ -304,7 +306,7 @@
                     <div className="bg-white rounded-[2rem] w-full max-w-4xl flex flex-col h-[85vh] shadow-[0_20px_50px_rgb(0,0,0,0.15)] overflow-hidden border-4 border-white animate-modal-pop">
                         <div className={`p-5 text-white flex justify-between items-center shadow-sm ${isTeacher ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : 'bg-gradient-to-r from-slate-700 to-slate-800'}`}>
                             <h3 className="font-black text-xl flex items-center tracking-wide">
-                                <i className="fa-solid fa-book-sparkles mr-3 text-yellow-300 animate-bounce-soft"></i> 
+                                <i className="fa-solid fa-book-open mr-3 text-yellow-300 animate-bounce-soft"></i> 
                                 【{project.title}】專案備忘錄 {isTeacher ? "(編輯模式)" : "(唯讀模式)"}
                             </h3>
                             <button onClick={onClose} className="hover:rotate-90 hover:scale-110 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
@@ -887,10 +889,10 @@
               return 0; 
           });
 
-          // 🌟 所有專案列表的排序與搜尋邏片
+          // 🌟 修正：最安全的排序邏輯，防止遇到 null, undefined 或非字串值導致的 React 白屏崩潰
           let finalAllProjectsList = [...activeProjects];
           if (allProjectsFilter !== "all") {
-              finalAllProjectsList = finalAllProjectsList.filter(p => p.status.includes(allProjectsFilter));
+              finalAllProjectsList = finalAllProjectsList.filter(p => p.status && p.status.includes(allProjectsFilter));
           }
           if (allProjectsSearch) {
               const q = allProjectsSearch.toLowerCase();
@@ -901,15 +903,38 @@
               );
           }
           finalAllProjectsList.sort((a, b) => {
-              if (allProjectsSort === 'lastUpdate_desc') return new Date(b.lastUpdate || 0) - new Date(a.lastUpdate || 0);
-              if (allProjectsSort === 'lastUpdate_asc') return new Date(a.lastUpdate || 0) - new Date(b.lastUpdate || 0);
-              if (allProjectsSort === 'nextDate_asc') {
-                  const dateA = a.nextStageDate ? new Date(a.nextStageDate).getTime() : Infinity;
-                  const dateB = b.nextStageDate ? new Date(b.nextStageDate).getTime() : Infinity;
-                  return dateA - dateB;
+              if (allProjectsSort === 'lastUpdate_desc') {
+                  const tA = a.lastUpdate ? new Date(a.lastUpdate).getTime() : 0;
+                  const tB = b.lastUpdate ? new Date(b.lastUpdate).getTime() : 0;
+                  if (isNaN(tA) && isNaN(tB)) return 0;
+                  if (isNaN(tA)) return 1;
+                  if (isNaN(tB)) return -1;
+                  return tB - tA;
               }
-              if (allProjectsSort === 'name_asc') return (a.title || '').localeCompare(b.title || '');
-              if (allProjectsSort === 'student_asc') return (a.studentName || '').localeCompare(b.studentName || '');
+              if (allProjectsSort === 'lastUpdate_asc') {
+                  const tA = a.lastUpdate ? new Date(a.lastUpdate).getTime() : 0;
+                  const tB = b.lastUpdate ? new Date(b.lastUpdate).getTime() : 0;
+                  if (isNaN(tA) && isNaN(tB)) return 0;
+                  if (isNaN(tA)) return -1;
+                  if (isNaN(tB)) return 1;
+                  return tA - tB;
+              }
+              if (allProjectsSort === 'nextDate_asc') {
+                  const tA = a.nextStageDate ? new Date(a.nextStageDate).getTime() : Number.MAX_SAFE_INTEGER;
+                  const tB = b.nextStageDate ? new Date(b.nextStageDate).getTime() : Number.MAX_SAFE_INTEGER;
+                  if (isNaN(tA) && isNaN(tB)) return 0;
+                  if (isNaN(tA)) return 1;
+                  if (isNaN(tB)) return -1;
+                  return tA - tB;
+              }
+              if (allProjectsSort === 'name_asc') {
+                  return String(a.title || '').localeCompare(String(b.title || ''));
+              }
+              if (allProjectsSort === 'student_asc') {
+                  const studentA = students.find(s => s.id === a.studentId)?.name || a.studentName || '';
+                  const studentB = students.find(s => s.id === b.studentId)?.name || b.studentName || '';
+                  return String(studentA).localeCompare(String(studentB));
+              }
               return 0;
           });
 
@@ -955,7 +980,7 @@
                                           
                                           <div className="flex justify-end gap-2 border-t-2 border-slate-50 pt-3">
                                               <button onClick={() => setEditingProjectNotes(project)} className={`px-4 py-2 font-black rounded-xl text-sm active:scale-95 transition flex items-center shadow-sm ${isUnread ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 animate-pulse' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
-                                                  <i className={`fa-solid fa-book-sparkles mr-2 ${isUnread ? 'text-rose-500' : ''}`}></i>備忘錄
+                                                  <i className={`fa-solid fa-book-open mr-2 ${isUnread ? 'text-rose-500' : ''}`}></i>備忘錄
                                                   {isUnread && <span className="ml-2 w-2 h-2 rounded-full bg-rose-500"></span>}
                                               </button>
                                               <button onClick={() => setManageStudentProjectsId(project.studentId)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-black rounded-xl text-sm hover:bg-indigo-100 active:scale-95 transition flex items-center shadow-sm">
@@ -1217,7 +1242,7 @@
                           <table className="w-full text-left border-collapse min-w-[800px]">
                               <thead>
                                   <tr className="bg-indigo-50/50 border-b-2 border-indigo-100 text-indigo-900">
-                                      <th className="p-4 font-black whitespace-nowrap w-2/5">專案名稱</th>
+                                      <th className="p-4 font-black whitespace-nowrap w-[35%]">專案名稱</th>
                                       <th className="p-4 font-black whitespace-nowrap">乘客</th>
                                       <th className="p-4 font-black whitespace-nowrap">狀態管理 (可直接修改)</th>
                                       <th className="p-4 font-black whitespace-nowrap">預估下階段 / 更新時間</th>
@@ -1268,17 +1293,18 @@
                                                       </div>
                                                   </td>
                                                   <td className="p-4">
-                                                      <div className="flex gap-2 justify-center opacity-70 group-hover:opacity-100 transition">
-                                                          <button onClick={() => setEditingProjectNotes(p)} className={`p-2.5 rounded-xl font-bold shadow-sm transition active:scale-95 ${isUnread ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 animate-pulse border border-rose-200' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-transparent'}`} title="備忘錄">
-                                                              <i className="fa-solid fa-book-sparkles"></i>
+                                                      {/* 🌟 修改了這裡的按鈕：換成普遍支援的 fa-book-open 並加上文字 */}
+                                                      <div className="flex gap-2 justify-center opacity-80 group-hover:opacity-100 transition">
+                                                          <button onClick={() => setEditingProjectNotes(p)} className={`px-3 py-1.5 rounded-xl font-bold shadow-sm transition active:scale-95 flex items-center gap-1 ${isUnread ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 animate-pulse border border-rose-200' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-transparent'}`} title="查看或編輯備忘錄">
+                                                              <i className="fa-solid fa-book-open"></i> <span className="hidden sm:inline">備忘錄</span>
                                                           </button>
-                                                          <button onClick={() => setEditingDateProjectId(p.id)} className="p-2.5 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-100 transition active:scale-95 border border-transparent" title="更改日期">
+                                                          <button onClick={() => setEditingDateProjectId(p.id)} className="px-3 py-1.5 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-100 transition active:scale-95 border border-transparent flex items-center gap-1" title="更改日期">
                                                               <i className="fa-solid fa-calendar-day"></i>
                                                           </button>
-                                                          <button onClick={() => handleTerminateProject(p)} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition active:scale-95 border border-transparent" title="終止下車">
+                                                          <button onClick={() => handleTerminateProject(p)} className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition active:scale-95 border border-transparent flex items-center gap-1" title="終止下車">
                                                               <i className="fa-solid fa-ban"></i>
                                                           </button>
-                                                          <button onClick={() => handlePermanentDeleteProject(p)} className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition active:scale-95 border border-transparent" title="永久刪除">
+                                                          <button onClick={() => handlePermanentDeleteProject(p)} className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition active:scale-95 border border-transparent flex items-center gap-1" title="永久刪除">
                                                               <i className="fa-solid fa-trash"></i>
                                                           </button>
                                                       </div>
@@ -1679,7 +1705,7 @@
                                                       <h4 className="font-black text-lg text-indigo-900">{p.title}</h4>
                                                       <div className="flex gap-2">
                                                           <button onClick={() => setEditingProjectNotes(p)} className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-200 font-bold active:scale-95 transition-colors">
-                                                              <i className="fa-solid fa-book-sparkles mr-1"></i> 備忘錄
+                                                              <i className="fa-solid fa-book-open mr-1"></i> 備忘錄
                                                           </button>
                                                           <button onClick={() => handleTerminateProject(p)} className="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200 font-bold active:scale-95 transition-colors"><i className="fa-solid fa-ban mr-1"></i> 終止下車</button>
                                                           <button onClick={() => handlePermanentDeleteProject(p)} className="text-xs bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg hover:bg-rose-200 font-bold active:scale-95 transition-colors"><i className="fa-solid fa-trash mr-1"></i> 刪除</button>
@@ -1877,7 +1903,7 @@
                       <div className="mb-4"><StatusBadge status={project.status} /></div>
 
                       <button onClick={() => setEditingProjectNotes(project)} className={`w-full mb-6 py-3 font-black rounded-2xl border-[3px] transition-all shadow-sm flex justify-center items-center group active:scale-95 ${isUnread ? 'bg-rose-50 text-rose-600 border-rose-300 animate-pulse' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}>
-                         <i className={`fa-solid fa-book-sparkles mr-2 text-lg ${isUnread ? 'text-rose-500' : 'group-hover:text-indigo-500'}`}></i> 開啟專案備忘錄 
+                         <i className={`fa-solid fa-book-open mr-2 text-lg ${isUnread ? 'text-rose-500' : 'group-hover:text-indigo-500'}`}></i> 開啟專案備忘錄 
                          {isUnread && <span className="ml-3 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow tracking-widest">NEW 指示!</span>}
                       </button>
 
