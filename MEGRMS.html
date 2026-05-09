@@ -13,15 +13,15 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- 🌟 加入灑花特效所需的函式庫 -->
+    <!-- 🌟 加入灑花特效與 Markdown 渲染所需的函式庫 -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
 
         body { font-family: 'Nunito', 'Noto Sans TC', sans-serif; background-color: #f0f4f8; }
 
-        /* 修正動畫導致 fixed 定位失效的問題 (transform: none) */
         @keyframes marquee { 0% { transform: translateX(100vw); } 100% { transform: translateX(-150%); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: none; } }
         @keyframes bounce-soft { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
@@ -29,12 +29,14 @@
         @keyframes slide-train { 0% { transform: translateX(120vw); } 100% { transform: translateX(-50vw); } }
         @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); } 50% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); } }
         @keyframes modalPop { 0% { opacity: 0; transform: scale(0.9) translateY(20px); } 100% { opacity: 1; transform: none; } }
+        @keyframes aiPulse { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 
         .animate-marquee { display: inline-block; white-space: nowrap; animation: marquee 25s linear infinite; }
         .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
         .animate-bounce-soft { animation: bounce-soft 2s infinite ease-in-out; }
         .animate-pulse-glow { animation: pulse-glow 2s infinite; }
         .animate-modal-pop { animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .animate-ai-bg { background-size: 200% 200%; animation: aiPulse 3s ease infinite; }
 
         .rich-content { font-size: 1.125rem; line-height: 1.75; }
         .rich-content ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.5rem; }
@@ -46,6 +48,16 @@
         .rich-content i, .rich-content em { font-style: italic; }
         .rich-content u { text-decoration: underline; text-decoration-color: #818cf8; text-decoration-thickness: 3px;}
         .rich-content strike { text-decoration: line-through; color: #9ca3af; }
+
+        /* AI 聊天區專用 Markdown 樣式 */
+        .ai-markdown { font-size: 0.95rem; line-height: 1.6; }
+        .ai-markdown p { margin-bottom: 0.75rem; }
+        .ai-markdown p:last-child { margin-bottom: 0; }
+        .ai-markdown ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.75rem; }
+        .ai-markdown ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 0.75rem; }
+        .ai-markdown li { margin-bottom: 0.25rem; }
+        .ai-markdown strong { font-weight: 900; color: inherit; }
+        .ai-markdown h3, .ai-markdown h4 { font-weight: 900; margin-top: 1rem; margin-bottom: 0.5rem; }
 
         ::-webkit-scrollbar { width: 10px; height: 10px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
@@ -179,6 +191,24 @@
           });
         };
 
+        // 🌟 指數退避重試的 API Fetch 工具 (給 Gemini API 使用)
+        const fetchWithRetry = async (url, options, retries = 5) => {
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(`HTTP error! status: ${res.status}, msg: ${errData.error?.message || 'Unknown'}`);
+                    }
+                    return await res.json();
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+        };
+
         const calculateDaysLeft = (targetDate) => {
             if (!targetDate) return null;
             const today = new Date(); today.setHours(0,0,0,0);
@@ -218,6 +248,155 @@
             {children}
           </div>
         );
+
+        // 🌟 新增：MEG 智能助理對話視窗元件
+        const AIAssistantModal = ({ isOpen, onClose, projects, students }) => {
+            const [query, setQuery] = useState('');
+            const [chatHistory, setChatHistory] = useState([
+                { role: 'ai', text: '嗨！我是 **MEG 列車長智能助理** 🤖✨\n\n我已經讀取了系統中所有的專案資料、更新日期以及備忘錄內容。您可以問我任何問題，例如：\n* 「幫我整理有哪些專案目前進度落後？」\n* 「備忘錄裡面提到轉投或退稿的專案有哪幾個？」\n* 「請列出下個禮拜死線即將到期的專案。」\n\n請問有什麼我可以幫忙的嗎？' }
+            ]);
+            const [isLoading, setIsLoading] = useState(false);
+            const chatEndRef = useRef(null);
+
+            useEffect(() => {
+                if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+            }, [chatHistory, isLoading, isOpen]);
+
+            const handleAsk = async () => {
+                if (!query.trim() || isLoading) return;
+
+                const userText = query.trim();
+                setQuery('');
+                setChatHistory(prev => [...prev, { role: 'user', text: userText }]);
+                setIsLoading(true);
+
+                try {
+                    // 根據 Canvas 環境規則，不包含 API Key
+                    const apiKey = ""; 
+                    
+                    // 清理並精簡專案資料，避免傳送過多無用標籤
+                    const cleanProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)').map(p => ({
+                        專案名稱: p.title,
+                        負責乘客: p.studentName,
+                        目前狀態: p.status,
+                        上次更新時間: p.lastUpdate,
+                        預估下階段日期: p.nextStageDate,
+                        指導人員: p.mentors,
+                        備忘錄與註記內容: extractText(p.notes) // 剝離 HTML
+                    }));
+
+                    const systemPrompt = `你是一個 MEG 研究室進度管理系統的專業 AI 助理「MEG 列車長副手」。
+你擁有目前系統內活躍專案的完整資料庫（以 JSON 格式提供）。
+請根據這些資料，以友善、專業、鼓勵的語氣回答使用者的問題。
+回答請盡量有條理，並使用 Markdown 語法（例如列點、粗體）。如果需要列出多個專案，請排版整齊。
+若資料中找不到答案，請誠實告知，不要捏造。
+
+【目前活躍專案資料庫】：
+${JSON.stringify(cleanProjects)}`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: userText }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    };
+
+                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，我目前無法產生回答。";
+                    setChatHistory(prev => [...prev, { role: 'ai', text: aiText }]);
+                } catch (err) {
+                    console.error("Gemini API Error:", err);
+                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ 發生錯誤，無法連接到 Gemini AI。\n\n詳細錯誤：${err.message}\n(若您是在本機離線執行，此功能需要正確設定 API 環境)` }]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleAsk();
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <ModalPortal>
+                    <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-end z-[100] sm:p-4 animate-fade-in">
+                        <div className="bg-white sm:rounded-[2rem] w-full h-full sm:h-[90vh] sm:max-w-md flex flex-col shadow-[0_20px_50px_rgb(0,0,0,0.3)] overflow-hidden border-4 border-white animate-modal-pop">
+                            
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 animate-ai-bg p-5 text-white flex justify-between items-center shadow-sm">
+                                <h3 className="font-black text-xl flex items-center tracking-wide">
+                                    <i className="fa-solid fa-sparkles mr-3 text-yellow-300 animate-pulse"></i> 
+                                    智能助理 (Gemini)
+                                </h3>
+                                <button onClick={onClose} className="hover:rotate-90 hover:scale-110 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
+                            </div>
+                            
+                            {/* Chat History */}
+                            <div className="flex-grow p-5 overflow-y-auto bg-slate-50 flex flex-col gap-4 thin-scrollbar">
+                                {chatHistory.map((msg, idx) => (
+                                    <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${
+                                            msg.role === 'user' 
+                                            ? 'bg-indigo-600 text-white rounded-tr-sm' 
+                                            : 'bg-white border-2 border-fuchsia-100 text-slate-700 rounded-tl-sm'
+                                        }`}>
+                                            {msg.role === 'ai' ? (
+                                                <div className="ai-markdown" dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(msg.text) : msg.text.replace(/\n/g, '<br>') }} />
+                                            ) : (
+                                                <div className="whitespace-pre-wrap font-bold text-sm leading-relaxed">{msg.text}</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                                {isLoading && (
+                                    <div className="flex w-full justify-start">
+                                        <div className="max-w-[85%] rounded-2xl rounded-tl-sm p-4 bg-white border-2 border-fuchsia-100 shadow-sm flex gap-2 items-center">
+                                            <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce"></div>
+                                            <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                            <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                                            <span className="text-xs font-bold text-fuchsia-600 ml-2">正在分析專案資料庫...</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <div ref={chatEndRef} />
+                            </div>
+
+                            {/* Input Area */}
+                            <div className="p-4 bg-white border-t-2 border-slate-100">
+                                <div className="relative">
+                                    <textarea 
+                                        className="w-full p-3 pr-14 border-2 border-slate-200 rounded-2xl bg-slate-50 focus:border-fuchsia-400 focus:bg-white transition-colors outline-none resize-none font-bold text-sm text-slate-700" 
+                                        rows="2" 
+                                        placeholder="詢問有關專案的任何問題..." 
+                                        value={query} 
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        disabled={isLoading}
+                                    ></textarea>
+                                    <button 
+                                        onClick={handleAsk}
+                                        disabled={isLoading || !query.trim()}
+                                        className="absolute right-2 bottom-2 w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                    >
+                                        <i className="fa-solid fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                                <div className="text-center mt-2 text-[10px] font-bold text-slate-400">
+                                    由 Google Gemini 2.5 AI 驅動，回答僅供參考。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </ModalPortal>
+            );
+        };
 
         const RichTextEditor = ({ initialValue, onChange, readOnly, placeholder }) => {
             const editorRef = useRef(null);
@@ -301,7 +480,6 @@
 
             return (
               <ModalPortal>
-                {/* 🌟 修改: Z-index 提升到 z-[90]，確保即使在管理專案的 Modal 中也能蓋在最上層 */}
                 <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-center z-[90] p-4 animate-fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-4xl flex flex-col h-[85vh] shadow-[0_20px_50px_rgb(0,0,0,0.3)] overflow-hidden border-4 border-white animate-modal-pop">
                         <div className={`p-5 text-white flex justify-between items-center shadow-sm ${isTeacher ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : 'bg-gradient-to-r from-slate-700 to-slate-800'}`}>
@@ -551,6 +729,7 @@
           const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
           const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
           const [isTerminatedModalOpen, setIsTerminatedModalOpen] = useState(false); 
+          const [isAIOpen, setIsAIOpen] = useState(false); // 🌟 新增：AI 助理開關狀態
 
           const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
           
@@ -888,7 +1067,6 @@
               return 0; 
           });
 
-          // 🌟 修正：最安全的排序邏輯，防止遇到 null, undefined 或非字串值導致的 React 白屏崩潰
           let finalAllProjectsList = [...activeProjects];
           if (allProjectsFilter !== "all") {
               finalAllProjectsList = finalAllProjectsList.filter(p => p.status && p.status.includes(allProjectsFilter));
@@ -999,16 +1177,27 @@
                  <UsefulLinksBoard links={usefulLinks} />
               </div>
 
-              <div className="flex flex-wrap justify-between items-center bg-white/90 backdrop-blur-md p-5 rounded-[2rem] shadow-sm border-2 border-white gap-4">
+              <div className="flex flex-wrap justify-between items-center bg-white/90 backdrop-blur-md p-5 rounded-[2rem] shadow-sm border-2 border-white gap-4 relative overflow-hidden">
+                {/* 🌟 智能助理背景特效 */}
+                <div className="absolute right-0 top-0 w-64 h-full bg-gradient-to-l from-purple-100/50 to-transparent pointer-events-none"></div>
+
                 <h2 className="text-2xl font-black text-indigo-900 flex items-center tracking-wide"><i className="fa-solid fa-gamepad text-indigo-500 mr-3 text-3xl"></i> 列車長控制台</h2>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 z-10">
                   <button onClick={() => setIsAnnouncementsModalOpen(true)} className="px-4 py-2.5 bg-sky-100 text-sky-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-bullhorn mr-2"></i> 發布公告</button>
                   <button onClick={() => setIsLinksModalOpen(true)} className="px-4 py-2.5 bg-emerald-100 text-emerald-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-link mr-2"></i> 連結管理</button>
                   <button onClick={() => setIsConfModalOpen(true)} className="px-4 py-2.5 bg-teal-100 text-teal-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-calendar-check mr-2"></i> 研討會</button>
                   <button onClick={openMarqueeManager} className="px-4 py-2.5 bg-indigo-100 text-indigo-700 rounded-2xl font-bold active:scale-95"><i className="fa-solid fa-tower-broadcast mr-2"></i> 廣播</button>
-                  <div className="w-0.5 bg-gray-200 mx-1"></div>
+                  <div className="w-0.5 bg-gray-200 mx-1 hidden md:block"></div>
+                  
+                  {/* 🌟 新增：智能助理按鈕 */}
+                  <button onClick={() => setIsAIOpen(true)} className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-2xl font-black active:scale-95 shadow-md flex items-center group overflow-hidden relative">
+                      <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                      <i className="fa-solid fa-sparkles mr-2 animate-pulse"></i> 問問 Gemini AI
+                  </button>
+                  
+                  <div className="w-0.5 bg-gray-200 mx-1 hidden md:block"></div>
                   <button onClick={() => setIsTerminatedModalOpen(true)} className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-2xl font-bold active:scale-95 hover:bg-slate-300 transition flex items-center">
-                      <i className="fa-solid fa-ghost mr-2"></i> 歷史下車專案 <span className="ml-2 bg-slate-400 text-white text-xs px-2 py-0.5 rounded-full">{terminatedProjects.length}</span>
+                      <i className="fa-solid fa-ghost mr-2"></i> 歷史下車 <span className="ml-2 bg-slate-400 text-white text-[10px] px-2 py-0.5 rounded-full">{terminatedProjects.length}</span>
                   </button>
                 </div>
               </div>
@@ -1317,7 +1506,14 @@
                   </Card>
               </div>
 
-              {/* 🌟 修正點：將備忘錄視窗也加入 TeacherDashboard 之中，這樣老師點擊備忘錄才會彈出視窗 */}
+              {/* 🌟 AI 智能助理視窗元件 */}
+              <AIAssistantModal 
+                  isOpen={isAIOpen} 
+                  onClose={() => setIsAIOpen(false)} 
+                  projects={projects} 
+                  students={students} 
+              />
+
               <ProjectNotesModal 
                   isOpen={!!editingProjectNotes} 
                   project={editingProjectNotes} 
@@ -1753,454 +1949,6 @@
                                               </div>
                                           ))
                                       }
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  </ModalPortal>
-              )}
-            </div>
-          );
-        };
-
-        const StudentWorkspace = ({ student, projects, setProjects, students, setStudents, conferences, announcements, usefulLinks }) => {
-          if (!student) return <div className="text-center py-20"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 mx-auto mb-6 animate-bounce-soft object-contain opacity-60 grayscale" /></div>;
-
-          const myActiveProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
-          const myTerminatedProjects = projects.filter(p => p.studentId === student.id && p.status === '🛑 專案已終止 (下車)');
-
-          const [draftStatuses, setDraftStatuses] = useState({});
-          const [draftDescriptions, setDraftDescriptions] = useState({});
-          const [draftNextDates, setDraftNextDates] = useState({}); 
-          const [editingProjectNotes, setEditingProjectNotes] = useState(null);
-          
-          const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-          const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0], initialDescription: '' });
-
-          const handleAddProjectSubmit = () => {
-              if(!newProject.title) return alert("請輸入專案名稱！");
-              
-              if (!newProject.initialDescription || newProject.initialDescription.trim().length < 10) {
-                  return alert("初步說明至少需要填寫 10 個字喔！");
-              }
-
-              const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案發想已建立。</b><br>初步說明：${newProject.initialDescription}</p>`;
-              const isConfAccepted = newProject.status.includes('研討會已被接受');
-              const isJournalAccepted = newProject.status.includes('期刊已被接受');
-
-              const p = {
-                  id: 'p' + Date.now(),
-                  studentId: student.id,
-                  studentName: student.name,
-                  title: newProject.title,
-                  status: newProject.status,
-                  lastUpdate: new Date().toISOString().split('T')[0],
-                  pendingStatus: null,
-                  notes: initialNote,
-                  hasConfAccepted: isConfAccepted,
-                  hasJournalAccepted: isJournalAccepted
-              };
-              const updated = [...projects, p];
-              setProjects(updated);
-              syncToBackend('addProject', p);
-              setIsAddProjectModalOpen(false);
-              setNewProject({ title: '', status: STATUSES[0], initialDescription: '' });
-          };
-
-          useEffect(() => {
-              myActiveProjects.forEach(p => {
-                  if (p.nextStageDate && p.overdueEmailSent !== true && p.overdueEmailSent !== "true" && !isStatusPending(p.pendingStatus)) {
-                      const daysLeft = calculateDaysLeft(p.nextStageDate);
-                      if (daysLeft !== null && daysLeft < 0) {
-                          const updated = {...p, overdueEmailSent: true};
-                          setProjects(prev => prev.map(proj => proj.id === p.id ? updated : proj));
-                      }
-                  }
-              });
-          }, [myActiveProjects.length]);
-
-          const handleSubmitRequest = (projectId, currentStatus) => {
-            const newStatus = draftStatuses[projectId];
-            const newDesc = draftDescriptions[projectId] || '';
-            const newDate = draftNextDates[projectId];
-
-            if (!newStatus || newStatus === currentStatus) return;
-            if (!newDate) return alert("🚨 請務必設定「預估抵達下個階段的日期」喔！");
-
-            const project = projects.find(p => p.id === projectId);
-            const updatedProject = { 
-                ...project, pendingStatus: newStatus, pendingDescription: newDesc, nextStageDate: newDate, 
-                isNewProgressUpdate: true, systemUrl: window.location.href, overdueEmailSent: false,
-                lastPokeDate: null 
-            };
-
-            setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
-            syncToBackend('updateProject', updatedProject);
-            
-            setDraftStatuses(prev => { const n={...prev}; delete n[projectId]; return n; });
-            setDraftDescriptions(prev => { const n={...prev}; delete n[projectId]; return n; });
-            setDraftNextDates(prev => { const n={...prev}; delete n[projectId]; return n; });
-          };
-
-          const handleMarkMemoAsRead = (projectId) => {
-             const project = projects.find(p => p.id === projectId);
-             if (project && (project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true')) {
-                 const updated = { ...project, hasUnreadMemo: false };
-                 setProjects(projects.map(p => p.id === projectId ? updated : p)); syncToBackend('updateProject', updated);
-             }
-          };
-
-          return (
-            <div className="space-y-8 animate-fade-in pb-20">
-              <AchievementDashboard 
-                  projects={projects.filter(p=>p.status!=='🛑 專案已終止 (下車)')} 
-                  allProjects={projects} 
-                  students={students} 
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                 <AnnouncementsBoard announcements={announcements} />
-                 <ConferencesBoard conferences={conferences} />
-                 <UsefulLinksBoard links={usefulLinks} />
-              </div>
-
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/80 backdrop-blur-md p-6 rounded-[2rem] border-2 border-white shadow-sm mb-8 gap-4">
-                <div>
-                  <h2 className="text-3xl font-black text-indigo-900 tracking-tight flex items-center"><i className="fa-solid fa-ticket text-indigo-400 mr-3 text-2xl -rotate-12"></i> Hi, {student.name}</h2>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {student.contactLink && (
-                      <button onClick={() => window.open(student.contactLink, '_blank')} className="px-5 py-2.5 bg-sky-100 text-sky-600 font-black rounded-xl hover:bg-sky-200 active:scale-95 transition flex items-center shadow-sm">
-                          <i className="fa-brands fa-facebook-messenger mr-2 text-lg"></i> 私訊指導教授
-                      </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-                {myActiveProjects.map(project => {
-                   const isUnread = project.hasUnreadMemo === true || String(project.hasUnreadMemo).toLowerCase() === 'true';
-                   const daysToNext = calculateDaysLeft(project.nextStageDate);
-
-                   return (
-                  <Card key={project.id} className="relative flex flex-col border-t-[8px] border-t-indigo-400 overflow-visible mt-6">
-                    {project.lastPokeDate && (
-                        <div className="absolute -top-12 left-0 w-full bg-rose-500 text-white font-black p-3 rounded-t-2xl shadow-lg flex items-center justify-center animate-pulse z-0 border-2 border-rose-600">
-                            <i className="fa-solid fa-hand-point-right mr-2 text-xl fa-bounce"></i> 老師在 {formatDate(project.lastPokeDate)} 關注了此專案，請盡快送出進度更新！
-                        </div>
-                    )}
-
-                    {isStatusPending(project.pendingStatus) && (
-                      <div className="absolute -top-4 -right-4 bg-orange-500 text-white text-sm font-black px-4 py-2 rounded-2xl shadow-lg flex items-center animate-bounce border-4 border-white z-50">
-                        <i className="fa-solid fa-hourglass-half mr-2 fa-spin-pulse"></i> 老師審核中
-                      </div>
-                    )}
-
-                    <div className="p-6 md:p-8 flex-grow flex flex-col bg-white rounded-3xl relative z-10">
-                      <h3 className="font-black text-2xl text-slate-800 leading-tight mb-3">{project.title}</h3>
-                      
-                      {project.mentors && (
-                          <div className="text-sm font-black text-indigo-600 mb-4 flex items-center bg-indigo-50 w-fit px-3 py-1.5 rounded-lg border border-indigo-100">
-                              <i className="fa-solid fa-user-graduate mr-2"></i>指導學長姐/專家：{project.mentors}
-                          </div>
-                      )}
-
-                      <div className="mb-4"><StatusBadge status={project.status} /></div>
-
-                      <button onClick={() => setEditingProjectNotes(project)} className={`w-full mb-6 py-3 font-black rounded-2xl border-[3px] transition-all shadow-sm flex justify-center items-center group active:scale-95 ${isUnread ? 'bg-rose-50 text-rose-600 border-rose-300 animate-pulse' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-indigo-50'}`}>
-                         <i className={`fa-solid fa-book-open mr-2 text-lg ${isUnread ? 'text-rose-500' : 'group-hover:text-indigo-500'}`}></i> 開啟專案備忘錄 
-                         {isUnread && <span className="ml-3 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow tracking-widest">NEW 指示!</span>}
-                      </button>
-
-                      <div className="bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 mt-auto shadow-inner">
-                        <label className="text-base font-black text-slate-700 block mb-3 flex items-center"><i className="fa-solid fa-bolt mr-2 text-yellow-500"></i> 更新進度狀態：</label>
-                        <div className="flex flex-col gap-4">
-                          {(() => {
-                              const isPending = isStatusPending(project.pendingStatus);
-                              const displayStatus = isPending ? project.pendingStatus : (draftStatuses[project.id] || project.status);
-                              return (
-                                  <>
-                                      <select 
-                                        className={`w-full p-3 border-2 rounded-xl font-bold transition-colors outline-none focus:border-indigo-400 ${isPending ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`} 
-                                        value={displayStatus} 
-                                        onChange={(e) => setDraftStatuses({...draftStatuses, [project.id]: e.target.value})} 
-                                        disabled={isPending}
-                                      >
-                                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                      </select>
-                                      
-                                      {!draftStatuses[project.id] && !isPending && project.nextStageDate && (
-                                          <div className={`p-3 rounded-xl border-2 font-black text-sm flex items-center ${daysToNext !== null && daysToNext < 0 ? 'bg-rose-100 text-rose-700 border-rose-300 animate-pulse' : daysToNext !== null && daysToNext <= 14 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
-                                              <i className="fa-regular fa-calendar-check mr-2"></i> 
-                                              預估抵達下個階段：{formatDate(project.nextStageDate)} 
-                                              {daysToNext !== null && <span className="ml-2">({daysToNext < 0 ? '已逾期！' : `剩餘 ${daysToNext} 天`})</span>}
-                                          </div>
-                                      )}
-                                      
-                                      {draftStatuses[project.id] && draftStatuses[project.id] !== project.status && !isPending && (
-                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200 shadow-sm animate-fade-in relative mt-2">
-                                          <label className="text-sm font-black text-rose-600 block mb-2"><i className="fa-solid fa-calendar-days mr-1"></i> 預估抵達下個階段的日期 *</label>
-                                          <input type="date" className="w-full p-3 border-2 border-rose-200 rounded-xl bg-white font-bold mb-4 text-rose-700 outline-none focus:border-rose-400" value={draftNextDates[project.id] || ''} onChange={(e) => setDraftNextDates({...draftNextDates, [project.id]: e.target.value})} />
-
-                                          <label className="text-sm font-black text-indigo-900 block mb-2">給老師的話 <span className="text-indigo-400 font-bold">(選填)</span></label>
-                                          <textarea className="w-full text-sm p-3 border-2 border-white rounded-xl focus:border-indigo-400 bg-white mb-3 resize-none font-medium" rows="2" value={draftDescriptions[project.id] || ''} onChange={(e) => setDraftDescriptions({...draftDescriptions, [project.id]: e.target.value})}></textarea>
-                                          
-                                          <div className="flex justify-end">
-                                            <button onClick={() => handleSubmitRequest(project.id, project.status)} className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 active:scale-95 flex items-center shadow-md">
-                                              <i className="fa-solid fa-paper-plane mr-2"></i> 送出審核並通知老師
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                  </>
-                              );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                )})}
-                
-                <Card className="border-dashed border-4 border-indigo-300 bg-indigo-50/50 flex flex-col items-center justify-center p-8 text-indigo-500 hover:bg-indigo-100 hover:border-indigo-500 hover:text-indigo-700 transition cursor-pointer group min-h-[350px] mt-6 shadow-sm" onClick={() => setIsAddProjectModalOpen(true)}>
-                    <i className="fa-solid fa-circle-plus text-6xl mb-4 group-hover:scale-110 group-hover:rotate-90 transition-all duration-300"></i>
-                    <span className="font-black text-2xl">發想新專案</span>
-                    <span className="text-sm font-bold opacity-80 mt-3 text-indigo-400">點擊此處開啟新旅程</span>
-                </Card>
-              </div>
-              
-              {myTerminatedProjects.length > 0 && (
-                <div className="mt-16 bg-slate-100 p-8 rounded-[2rem] border-4 border-white shadow-inner">
-                  <h3 className="text-xl font-black text-slate-500 mb-6 flex items-center">
-                      <i className="fa-solid fa-ghost mr-3"></i> 已下車 / 終止的專案紀錄
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-75 grayscale hover:grayscale-0 transition duration-500">
-                    {myTerminatedProjects.map(project => (
-                        <div key={project.id} className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-sm">
-                            <h4 className="font-black text-lg text-slate-700 mb-2">{project.title}</h4>
-                            <StatusBadge status={project.status} />
-                            <button onClick={() => setEditingProjectNotes(project)} className="w-full mt-4 bg-slate-200 text-slate-600 font-black py-2 rounded-xl hover:bg-slate-300 transition"><i className="fa-solid fa-book-open mr-2"></i>查看最終備忘錄</button>
-                        </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {isAddProjectModalOpen && (
-                  <ModalPortal>
-                      <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
-                          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
-                              <div className="bg-gradient-to-r from-indigo-500 to-blue-600 p-5 text-white flex justify-between items-center">
-                                  <h3 className="font-black text-xl"><i className="fa-solid fa-lightbulb mr-3"></i> 發想新專案</h3>
-                                  <button onClick={() => setIsAddProjectModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
-                              </div>
-                              <div className="p-6 bg-slate-50 space-y-4">
-                                  <div>
-                                      <label className="text-sm font-bold text-slate-600 block mb-1">專案名稱 *</label>
-                                      <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.title} onChange={(e) => setNewProject({...newProject, title: e.target.value})} placeholder="輸入新點子或專案名稱" />
-                                  </div>
-                                  <div>
-                                      <label className="text-sm font-bold text-slate-600 block mb-1">初始狀態</label>
-                                      <select className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={newProject.status} onChange={(e) => setNewProject({...newProject, status: e.target.value})}>
-                                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                      </select>
-                                  </div>
-                                  <div>
-                                      <label className="text-sm font-bold text-slate-600 block mb-1">初步說明 (至少10字) *</label>
-                                      <textarea className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-medium resize-none focus:border-indigo-400" rows="3" value={newProject.initialDescription} onChange={(e) => setNewProject({...newProject, initialDescription: e.target.value})} placeholder="請輸入至少10個字的初步說明，這將作為最初始的備忘錄資料..."></textarea>
-                                  </div>
-                                  <div className="flex justify-end gap-3 mt-6">
-                                      <button onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
-                                      <button onClick={handleAddProjectSubmit} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">建立專案</button>
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  </ModalPortal>
-              )}
-
-              <ProjectNotesModal isOpen={!!editingProjectNotes} project={editingProjectNotes} onClose={() => setEditingProjectNotes(null)} isTeacher={false} markAsRead={handleMarkMemoAsRead} />
-            </div>
-          );
-        };
-
-        const App = () => {
-          const [currentUser, setCurrentUser] = useState(null); 
-          const TEACHER_EMAIL = "composerho@gmail.com"; 
-          
-          const [students, setStudents] = useState([]); const [projects, setProjects] = useState([]);
-          const [conferences, setConferences] = useState([]); const [announcements, setAnnouncements] = useState([]); const [usefulLinks, setUsefulLinks] = useState([]);
-          const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
-          const [isLoading, setIsLoading] = useState(true);
-
-          const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
-          const [tempMarquee, setTempMarquee] = useState("");
-          
-          const [showCelebration, setShowCelebration] = useState(false);
-          const [hasCelebrated, setHasCelebrated] = useState(false);
-
-          const openMarqueeManager = () => {
-              setTempMarquee(marqueeText);
-              setIsMarqueeModalOpen(true);
-          };
-
-          useEffect(() => {
-              const overlay = document.getElementById('bg-overlay');
-              if (overlay) {
-                  if (currentUser && currentUser.role !== 'unauthorized') {
-                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-white/40 backdrop-blur-[4px]";
-                  } else {
-                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-transparent backdrop-blur-none";
-                  }
-              }
-          }, [currentUser]);
-
-          useEffect(() => {
-              if (currentUser && currentUser.role !== 'unauthorized' && projects.length > 0 && !hasCelebrated) {
-                  const relevantProjects = currentUser.role === 'teacher' ? projects : projects.filter(p => p.studentId === currentUser.studentData.id);
-                  
-                  const hasRecentAcceptance = relevantProjects.some(p => {
-                      if (!p.acceptedDate) return false;
-                      if (!p.status.includes('已被接受')) return false; 
-                      
-                      const diffDays = (new Date() - new Date(p.acceptedDate)) / (1000 * 60 * 60 * 24);
-                      return diffDays >= 0 && diffDays <= 3; 
-                  });
-
-                  if (hasRecentAcceptance) {
-                      setHasCelebrated(true); 
-                      setShowCelebration(true);
-                      
-                      const duration = 4000;
-                      const end = Date.now() + duration;
-
-                      const frame = () => {
-                          if (window.confetti) {
-                              window.confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
-                              window.confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#fbbf24'] });
-                          }
-                          if (Date.now() < end) {
-                              requestAnimationFrame(frame);
-                          }
-                      };
-                      frame();
-
-                      setTimeout(() => {
-                          setShowCelebration(false);
-                      }, 5000);
-                  }
-              }
-          }, [currentUser, projects, hasCelebrated]);
-
-          useEffect(() => {
-            let isMounted = true;
-            
-            const timer = setTimeout(() => {
-                if(isMounted) setIsLoading(false);
-            }, 3000);
-
-            fetch(GAS_API_URL).then(res => res.json()).then(data => {
-                if (!isMounted) return;
-                if(data.students) setStudents(data.students); 
-                if(data.projects) setProjects(data.projects.filter(p => p.isDeleted !== true && p.isDeleted !== 'true'));
-                if(data.config && data.config.length > 0) {
-                  const marqueeConf = data.config.find(c => c.key === 'marqueeText'); if (marqueeConf) setMarqueeText(marqueeConf.value);
-                  const confConfig = data.config.find(c => c.key === 'conferencesList'); if (confConfig && confConfig.value) try { setConferences(JSON.parse(confConfig.value)); } catch(e) {}
-                  const annConfig = data.config.find(c => c.key === 'announcementsList'); if (annConfig && annConfig.value) try { setAnnouncements(JSON.parse(annConfig.value)); } catch(e) {}
-                  const linkConfig = data.config.find(c => c.key === 'usefulLinksList'); if (linkConfig && linkConfig.value) try { setUsefulLinks(JSON.parse(linkConfig.value)); } catch(e) {}
-                }
-                clearTimeout(timer);
-                setIsLoading(false);
-              }).catch(err => {
-                console.error("載入失敗：", err);
-                if(isMounted) setIsLoading(false);
-              });
-
-              return () => { isMounted = false; };
-          }, []);
-
-          if (isLoading) return <div className="min-h-screen flex items-center justify-center flex-col z-10"><img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-32 h-32 animate-bounce-soft mb-6 object-contain drop-shadow-2xl" /><h2 className="text-2xl font-black text-indigo-900 bg-white/80 px-6 py-2 rounded-full shadow-sm">列車啟動中...</h2></div>;
-
-          const handleLogin = (email, name, picture) => {
-            const userEmail = email.toLowerCase().trim();
-            if (userEmail === TEACHER_EMAIL.toLowerCase().trim()) return setCurrentUser({ email: userEmail, name, picture, role: 'teacher', studentData: null });
-            const foundStudent = students.find(s => s.email && s.email.toLowerCase().trim() === userEmail);
-            if (foundStudent) return setCurrentUser({ email: userEmail, name: foundStudent.name, picture, role: 'student', studentData: foundStudent });
-            setCurrentUser({ email: userEmail, name, picture, role: 'unauthorized', studentData: null });
-          };
-
-          if (!currentUser) return <LoginScreen onLoginSuccess={handleLogin} />;
-          if (currentUser.role === 'unauthorized') return <div className="min-h-screen flex items-center justify-center text-xl font-black text-rose-500 bg-white/80 z-20 absolute inset-0">未授權的乘客，無法進入車廂。</div>;
-
-          return (
-            <div className="min-h-screen flex flex-col z-10 relative">
-              {showCelebration && (
-                  <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-[100] animate-fade-in transition-opacity duration-1000">
-                      <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 drop-shadow-[0_10px_20px_rgba(236,72,153,0.5)] animate-bounce-soft tracking-widest text-center px-4 leading-tight">
-                          🎉 恭喜新論文被接受~ 🎊
-                      </h1>
-                  </div>
-              )}
-
-              <header className="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex justify-between items-center">
-                  <h1 className="text-2xl font-black text-indigo-900 flex items-center">
-                      <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" alt="MEG Logo" className="w-10 h-10 mr-3 object-contain" /> MEG-RMS
-                      <span className="hidden lg:inline-block ml-4 text-[10px] bg-rose-50 text-rose-600 px-3 py-1 rounded-lg font-black tracking-widest border border-rose-100">(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</span>
-                  </h1>
-                  
-                  <div className="flex items-center gap-4">
-                      <div className="hidden sm:flex items-center bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
-                          {currentUser.picture ? (
-                              <img src={currentUser.picture} className="w-8 h-8 rounded-full mr-2 shadow-sm border-2 border-white" alt="avatar" />
-                          ) : (
-                              <div className="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold mr-2 border-2 border-white">{currentUser.name.charAt(0)}</div>
-                          )}
-                          <span className="font-bold text-indigo-900 text-sm">{currentUser.name}</span>
-                          <span className="text-xs text-indigo-500 ml-2 font-black bg-indigo-100 px-2 py-0.5 rounded-md">{currentUser.role === 'teacher' ? '列車長' : '乘客'}</span>
-                      </div>
-                      <button onClick={() => { setCurrentUser(null); if(window.changeBackground) window.changeBackground(); }} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-rose-100 hover:text-rose-600 transition shadow-sm">
-                          <i className="fa-solid fa-right-from-bracket mr-1"></i> 登出
-                      </button>
-                  </div>
-              </header>
-
-              {marqueeText && (
-                  <div className="bg-indigo-600 text-white text-lg font-black py-3 overflow-hidden shadow-inner flex relative z-30">
-                       <div className="px-5 bg-rose-500 z-10 flex items-center shadow-[5px_0_15px_rgba(0,0,0,0.2)] whitespace-nowrap tracking-wide">
-                           <i className="fa-solid fa-tower-broadcast fa-fade mr-3 text-xl"></i> 列車廣播
-                       </div>
-                       <div className="whitespace-nowrap animate-marquee flex-1 flex items-center tracking-wide">{marqueeText}</div>
-                  </div>
-              )}
-
-              <main className="max-w-7xl mx-auto px-4 py-8 flex-grow w-full z-10 relative">
-                {currentUser.role === 'teacher' ? 
-                  <TeacherDashboard projects={projects} setProjects={setProjects} students={students} setStudents={setStudents} conferences={conferences} setConferences={setConferences} announcements={announcements} setAnnouncements={setAnnouncements} usefulLinks={usefulLinks} setUsefulLinks={setUsefulLinks} openMarqueeManager={openMarqueeManager} /> 
-                  : 
-                  <StudentWorkspace student={currentUser.studentData} students={students} setStudents={setStudents} projects={projects} setProjects={setProjects} conferences={conferences} announcements={announcements} usefulLinks={usefulLinks} />
-                }
-              </main>
-              
-              <footer className="text-center py-6 text-sm font-black text-slate-500/70 z-10 relative mt-auto">
-                 <p>(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</p>
-              </footer>
-
-              {isMarqueeModalOpen && (
-                  <ModalPortal>
-                      <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
-                          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
-                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 text-white flex justify-between items-center">
-                                  <h3 className="font-black text-xl"><i className="fa-solid fa-tower-broadcast mr-3"></i> 設定全站跑馬燈廣播</h3>
-                                  <button onClick={() => setIsMarqueeModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
-                              </div>
-                              <div className="p-6 bg-slate-50">
-                                  <textarea className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white font-bold resize-none focus:border-indigo-400" rows="3" placeholder="請輸入廣播訊息..." value={tempMarquee} onChange={(e) => setTempMarquee(e.target.value)}></textarea>
-                                  <div className="flex justify-end gap-3 mt-4">
-                                      <button onClick={() => setIsMarqueeModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
-                                      <button onClick={() => {
-                                          setMarqueeText(tempMarquee);
-                                          syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });
-                                          setIsMarqueeModalOpen(false);
-                                      }} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">更新廣播</button>
                                   </div>
                               </div>
                           </div>
