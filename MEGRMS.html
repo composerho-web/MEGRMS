@@ -65,7 +65,6 @@
     <div id="main-bg" class="bg-shapes"></div>
     
     <script>
-        // 🌟 更新為高解析度隨機背景圖
         const bgImages = [
             'https://i.ibb.co/DP0f0sJH/Gemini-Generated-Image-glqg2kglqg2kglqg-1.png', 
             'https://i.ibb.co/ZRxN3Y3D/Gemini-Generated-Image-21aq1o21aq1o21aq.png',    
@@ -230,7 +229,6 @@
 
             if (readOnly) {
                 return (
-                    // 🌟 修正了唯讀模式的容器，加上 h-full 確保超過範圍時出現捲軸
                     <div 
                         className="rich-content text-gray-800 leading-relaxed bg-white/60 p-5 rounded-2xl border-2 border-indigo-100 h-full overflow-y-auto shadow-inner" 
                         dangerouslySetInnerHTML={{__html: initialValue || '<span class="text-gray-400 font-bold flex items-center justify-center h-full"><i class="fa-solid fa-ghost mr-2"></i> 空空如也，目前沒有備忘錄喔。</span>'}}
@@ -531,6 +529,9 @@
           
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
           const [pendingApprovalFlow, setPendingApprovalFlow] = useState(null);
+
+          // 🌟 修復白屏問題：補上 newStudent 狀態的宣告
+          const [newStudent, setNewStudent] = useState({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
 
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
           const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
