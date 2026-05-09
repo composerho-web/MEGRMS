@@ -401,8 +401,12 @@
         );
 
         const AchievementDashboard = ({ projects, students, activeFilter, onFilterClick }) => {
-            const confSubmitted = projects.filter(p => p.status.includes('研討會已投稿') || p.status.includes('研討會已被接受')).length;
-            const journalSubmitted = projects.filter(p => p.status.includes('期刊已投稿') || p.status.includes('期刊已被接受')).length;
+            // 🌟 將投稿與接受分開計算
+            const confSubmitted = projects.filter(p => p.status.includes('研討會已投稿')).length;
+            const confAccepted = projects.filter(p => p.status.includes('研討會已被接受')).length;
+            const journalSubmitted = projects.filter(p => p.status.includes('期刊已投稿')).length;
+            const journalAccepted = projects.filter(p => p.status.includes('期刊已被接受')).length;
+            
             const pilotCompleted = projects.filter(p => p.status.includes('PILOT完成')).length;
             const gameDev = projects.filter(p => p.status.includes('發展中')).length;
             const journalWriting = projects.filter(p => p.status.includes('寫作中')).length;
@@ -410,11 +414,13 @@
             const stats = [
                 {label: '乘客總數', val: students.length, color: 'text-white', filter: 'students'},
                 {label: '活躍專案數', val: projects.length, color: 'text-white', filter: 'all_projects'},
-                {label: '研討會已投稿/接受', val: confSubmitted, color: 'text-green-300', filter: '研討會'},
-                {label: '期刊已投稿/接受', val: journalSubmitted, color: 'text-green-300', filter: '期刊'},
-                {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300', filter: 'PILOT完成'},
                 {label: '遊戲發展中', val: gameDev, color: 'text-yellow-300', filter: '發展中'},
-                {label: '期刊寫作中', val: journalWriting, color: 'text-pink-300', filter: '寫作中'}
+                {label: 'PILOT完成', val: pilotCompleted, color: 'text-yellow-300', filter: 'PILOT完成'},
+                {label: '期刊寫作中', val: journalWriting, color: 'text-pink-300', filter: '寫作中'},
+                {label: '研討會已投稿', val: confSubmitted, color: 'text-emerald-300', filter: '研討會已投稿'},
+                {label: '研討會已接受', val: confAccepted, color: 'text-green-300', filter: '研討會已被接受'},
+                {label: '期刊已投稿', val: journalSubmitted, color: 'text-emerald-300', filter: '期刊已投稿'},
+                {label: '期刊已接受', val: journalAccepted, color: 'text-green-300', filter: '期刊已被接受'}
             ];
 
             return (
@@ -433,13 +439,14 @@
                             )}
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                        {/* 🌟 調整網格配置以容納 9 個項目 */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
                             {stats.map((item, idx) => (
                                 <div key={idx} 
                                      onClick={() => onFilterClick && onFilterClick(item.filter)}
-                                     className={`bg-white/10 backdrop-blur-md p-4 rounded-2xl border flex flex-col justify-center text-center hover:bg-white/20 transition-all group cursor-pointer ${activeFilter === item.filter ? 'border-yellow-300 shadow-[0_0_15px_rgba(253,224,71,0.5)] bg-white/20 scale-105' : 'border-white/20'}`}>
-                                    <span className="text-indigo-100 text-[11px] font-black tracking-wider mb-2 opacity-80">{item.label}</span>
-                                    <span className={`text-3xl font-black drop-shadow-lg group-hover:scale-110 transition-transform ${item.color}`}>{item.val}</span>
+                                     className={`bg-white/10 backdrop-blur-md p-3 rounded-2xl border flex flex-col justify-center text-center hover:bg-white/20 transition-all group cursor-pointer ${activeFilter === item.filter ? 'border-yellow-300 shadow-[0_0_15px_rgba(253,224,71,0.5)] bg-white/20 scale-105' : 'border-white/20'}`}>
+                                    <span className="text-indigo-100 text-[10px] font-black tracking-wider mb-1 opacity-90">{item.label}</span>
+                                    <span className={`text-2xl font-black drop-shadow-lg group-hover:scale-110 transition-transform ${item.color}`}>{item.val}</span>
                                 </div>
                             ))}
                         </div>
@@ -530,7 +537,6 @@
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
           const [pendingApprovalFlow, setPendingApprovalFlow] = useState(null);
 
-          // 🌟 修復白屏問題：補上 newStudent 狀態的宣告
           const [newStudent, setNewStudent] = useState({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
 
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
@@ -545,6 +551,11 @@
           const [newConf, setNewConf] = useState({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
           const [editingConfId, setEditingConfId] = useState(null);
           const [editConfData, setEditConfData] = useState({});
+
+          // 🌟 加入連結編輯所需的 State
+          const [newLinkData, setNewLinkData] = useState({ title: '', url: '', description: '' });
+          const [editingLinkId, setEditingLinkId] = useState(null);
+          const [editLinkData, setEditLinkData] = useState({});
 
           const [activeFilter, setActiveFilter] = useState(null);
 
@@ -763,6 +774,31 @@
             if(!confirm("確定要刪除嗎？")) return;
             const updatedConfs = conferences.filter(c => c.id !== confId);
             setConferences(updatedConfs); syncToBackend('updateConfig', { key: 'conferencesList', value: JSON.stringify(updatedConfs) });
+          };
+
+          // 🌟 新增與儲存連結的處理邏輯
+          const handleAddLinkSubmit = () => {
+              if(!newLinkData.title || !newLinkData.url) return alert("請輸入標題與網址");
+              const newLink = { id: 'l'+Date.now(), ...newLinkData };
+              const updated = [...usefulLinks, newLink];
+              setUsefulLinks(updated);
+              syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updated) });
+              setNewLinkData({ title: '', url: '', description: '' });
+          };
+          
+          const handleSaveEditLink = () => {
+              if(!editLinkData.title || !editLinkData.url) return alert("請輸入標題與網址");
+              const updated = usefulLinks.map(l => l.id === editingLinkId ? editLinkData : l);
+              setUsefulLinks(updated);
+              syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updated) });
+              setEditingLinkId(null);
+          };
+
+          const handleDeleteLink = (linkId) => {
+              if(!confirm("確定刪除此連結？")) return;
+              const updated = usefulLinks.filter(item => item.id !== linkId);
+              setUsefulLinks(updated);
+              syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updated) });
           };
 
           const handleSetLocalFolder = (student) => {
@@ -1068,6 +1104,7 @@
                   </div>
               )}
 
+              {/* 🌟 修改此處：擴充編輯乘客資料 Modal */}
               {editingStudent && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
                       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
@@ -1075,7 +1112,7 @@
                               <h3 className="font-black text-xl"><i className="fa-solid fa-pen mr-3"></i> 編輯乘客資料</h3>
                               <button onClick={() => setEditingStudent(null)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
                           </div>
-                          <div className="p-6 bg-slate-50 space-y-4">
+                          <div className="p-6 bg-slate-50 space-y-4 max-h-[70vh] overflow-y-auto">
                               <div>
                                   <label className="text-sm font-bold text-slate-600 block mb-1">姓名</label>
                                   <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={editingStudent.name} onChange={(e) => setEditingStudent({...editingStudent, name: e.target.value})} />
@@ -1086,8 +1123,17 @@
                               </div>
                               <div>
                                   <label className="text-sm font-bold text-slate-600 block mb-1">學制</label>
-                                  <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={editingStudent.degree} onChange={(e) => setEditingStudent({...editingStudent, degree: e.target.value})} />
+                                  <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold" value={editingStudent.degree || ''} onChange={(e) => setEditingStudent({...editingStudent, degree: e.target.value})} />
                               </div>
+                              <div className="border-t-2 border-slate-200 my-4 pt-4">
+                                  <label className="text-sm font-bold text-slate-600 block mb-1"><i className="fa-brands fa-facebook-messenger mr-1 text-sky-500"></i>聯絡網址 (FB/Line/IG)</label>
+                                  <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold text-sky-600" placeholder="https://" value={editingStudent.contactLink || ''} onChange={(e) => setEditingStudent({...editingStudent, contactLink: e.target.value})} />
+                              </div>
+                              <div>
+                                  <label className="text-sm font-bold text-slate-600 block mb-1"><i className="fa-solid fa-folder-tree mr-1 text-indigo-500"></i>本機資料夾路徑</label>
+                                  <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold text-indigo-600" placeholder="例如: D:\Research\StudentName" value={editingStudent.localFolder || ''} onChange={(e) => setEditingStudent({...editingStudent, localFolder: e.target.value})} />
+                              </div>
+                              
                               <div className="flex justify-end gap-3 mt-6">
                                   <button onClick={() => setEditingStudent(null)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
                                   <button onClick={() => {
@@ -1243,48 +1289,46 @@
                   </div>
               )}
 
+              {/* 🌟 修改此處：支援編輯常用連結 */}
               {isLinksModalOpen && (
                   <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in">
-                      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-modal-pop border-4 border-white h-[80vh]">
+                      <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-modal-pop border-4 border-white h-[85vh]">
                           <div className="bg-gradient-to-r from-emerald-400 to-teal-500 p-5 text-white flex justify-between items-center">
                               <h3 className="font-black text-xl"><i className="fa-solid fa-link mr-3"></i> 百寶袋常用連結管理</h3>
-                              <button onClick={() => setIsLinksModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                              <button onClick={() => { setIsLinksModalOpen(false); setEditingLinkId(null); }} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
                           </div>
-                          <div className="p-6 bg-slate-50 flex-grow overflow-y-auto flex flex-col gap-6">
-                              <div className="bg-white p-5 rounded-2xl border-2 border-emerald-100 shadow-sm space-y-3">
-                                  <h4 className="font-black text-emerald-800 mb-2 flex items-center"><i className="fa-solid fa-plus-circle mr-2"></i>新增連結</h4>
-                                  <input type="text" id="newLinkTitle" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold" placeholder="顯示標題 (例如: 研究室雲端)" />
-                                  <input type="url" id="newLinkUrl" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold" placeholder="完整網址 (包含 http://)" />
-                                  <input type="text" id="newLinkDesc" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 font-medium" placeholder="簡短說明 (選填)" />
-                                  <div className="flex justify-end mt-2">
-                                      <button onClick={() => {
-                                          const title = document.getElementById('newLinkTitle').value;
-                                          const url = document.getElementById('newLinkUrl').value;
-                                          const description = document.getElementById('newLinkDesc').value;
-                                          if(!title || !url) return alert("請輸入標題與網址");
-                                          const newLink = { id: 'l'+Date.now(), title, url, description };
-                                          const updated = [...usefulLinks, newLink];
-                                          setUsefulLinks(updated);
-                                          syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updated) });
-                                          document.getElementById('newLinkTitle').value = '';
-                                          document.getElementById('newLinkUrl').value = '';
-                                          document.getElementById('newLinkDesc').value = '';
-                                      }} className="px-5 py-2.5 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 shadow-sm active:scale-95">新增連結</button>
+                          <div className="p-6 bg-slate-50 flex-grow overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+                              
+                              <div className="bg-white p-5 rounded-2xl border-2 border-emerald-100 shadow-sm h-fit space-y-4">
+                                  <h4 className="font-black text-emerald-800 flex items-center"><i className="fa-solid fa-plus-circle mr-2"></i>{editingLinkId ? "編輯連結" : "新增連結"}</h4>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block">顯示標題 *</label>
+                                      <input type="text" className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold" placeholder="例如: 研究室雲端" value={editingLinkId ? editLinkData.title : newLinkData.title} onChange={(e) => editingLinkId ? setEditLinkData({...editLinkData, title: e.target.value}) : setNewLinkData({...newLinkData, title: e.target.value})} />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block">完整網址 *</label>
+                                      <input type="url" className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold" placeholder="包含 http://" value={editingLinkId ? editLinkData.url : newLinkData.url} onChange={(e) => editingLinkId ? setEditLinkData({...editLinkData, url: e.target.value}) : setNewLinkData({...newLinkData, url: e.target.value})} />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block">簡短說明 (選填)</label>
+                                      <input type="text" className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-slate-50 font-medium" placeholder="簡短說明" value={editingLinkId ? editLinkData.description : newLinkData.description} onChange={(e) => editingLinkId ? setEditLinkData({...editLinkData, description: e.target.value}) : setNewLinkData({...newLinkData, description: e.target.value})} />
+                                  </div>
+                                  <div className="flex justify-end gap-2 mt-4">
+                                      {editingLinkId && <button onClick={() => setEditingLinkId(null)} className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消編輯</button>}
+                                      <button onClick={editingLinkId ? handleSaveEditLink : handleAddLinkSubmit} className="px-4 py-2 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 shadow-sm active:scale-95">{editingLinkId ? "儲存變更" : "新增連結"}</button>
                                   </div>
                               </div>
+                              
                               <div className="space-y-3">
                                   {usefulLinks.map(l => (
-                                      <div key={l.id} className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center">
-                                          <div>
-                                              <div className="font-black text-slate-800">{l.title}</div>
-                                              <div className="text-xs text-slate-500">{l.url}</div>
+                                      <div key={l.id} className="bg-white p-4 rounded-xl border border-slate-200 relative group overflow-hidden">
+                                          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <button onClick={() => { setEditingLinkId(l.id); setEditLinkData(l); }} className="w-8 h-8 bg-sky-50 text-sky-600 rounded-lg hover:bg-sky-100"><i className="fa-solid fa-pen"></i></button>
+                                              <button onClick={() => handleDeleteLink(l.id)} className="w-8 h-8 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"><i className="fa-solid fa-trash"></i></button>
                                           </div>
-                                          <button onClick={() => {
-                                              if(!confirm("確定刪除此連結？")) return;
-                                              const updated = usefulLinks.filter(item => item.id !== l.id);
-                                              setUsefulLinks(updated);
-                                              syncToBackend('updateConfig', { key: 'usefulLinksList', value: JSON.stringify(updated) });
-                                          }} className="text-rose-500 hover:text-rose-700 bg-rose-50 p-2 rounded-lg"><i className="fa-solid fa-trash"></i></button>
+                                          <div className="font-black text-slate-800 text-lg mb-1 pr-20 truncate">{l.title}</div>
+                                          <div className="text-xs text-sky-600 font-bold truncate mb-1">{l.url}</div>
+                                          {l.description && <div className="text-xs text-slate-500 font-medium truncate">{l.description}</div>}
                                       </div>
                                   ))}
                               </div>
