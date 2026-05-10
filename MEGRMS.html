@@ -881,23 +881,17 @@ ${JSON.stringify(cleanLinks)}`;
                 <div className="p-8 text-center flex flex-col items-center">
                   <h2 className="text-2xl font-black text-indigo-900 mb-2">乘客請驗票登入 🎫</h2>
                   
-                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-4 animate-pulse-glow mt-4 min-h-[60px] flex items-center justify-center">
+                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4 min-h-[60px] flex items-center justify-center">
                       <div id="google-signin-button"></div>
-                  </div>
-                  
-                  <div className="w-full text-center mb-4">
-                      <button onClick={() => setShowDevLogin(!showDevLogin)} className="text-xs font-bold text-slate-500 hover:text-indigo-600 transition underline decoration-slate-300 underline-offset-4">
-                          {showDevLogin ? '⬆️ 隱藏手動驗票' : '⚠️ Google 登入沒反應？點此切換「手動驗票」'}
-                      </button>
                   </div>
                   
                   {showDevLogin && (
                       <div className="w-full animate-fade-in bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 shadow-inner">
-                          <label className="text-sm font-black text-slate-700 block mb-2">手動驗票通道 (免 Google 帳號)</label>
+                          <label className="text-sm font-black text-slate-700 block mb-2"><i className="fa-solid fa-user-astronaut mr-2 text-indigo-500"></i>隱藏測試驗票通道</label>
                           <input type="text" placeholder="輸入您的登入 Email..." className="w-full p-3 text-sm border-2 border-slate-200 rounded-xl focus:border-indigo-400 mb-3 font-bold text-center bg-white outline-none" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} />
                           <button onClick={() => {
                               if(!devEmail.includes('@')) return alert('請輸入有效的 Email！');
-                              onLoginSuccessRef.current(devEmail, '乘客 (備用登入)', '');
+                              onLoginSuccessRef.current(devEmail, '測試員 (備用登入)', '');
                           }} className="w-full py-3 bg-gradient-to-r from-slate-700 to-slate-900 text-white font-black rounded-xl hover:shadow-lg active:scale-95 transition-transform flex justify-center items-center">
                               <i className="fa-solid fa-train-tram mr-2"></i> 強制上車
                           </button>
@@ -989,7 +983,16 @@ ${JSON.stringify(cleanLinks)}`;
                                 <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" className="w-10 h-10 sm:w-12 sm:h-12 mr-4 animate-bounce-soft object-contain drop-shadow-md" alt="logo" />
                                 哈囉，{student.name}！歡迎回到列車。
                             </h2>
-                            <button onClick={() => window.open('mailto:composerho@gmail.com', '_blank')} className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-black rounded-2xl transition shadow-inner border border-white/40 flex items-center w-fit active:scale-95">
+                            <button 
+                                onClick={() => {
+                                    if(student.contactLink && student.contactLink.trim() !== '') {
+                                        window.open(student.contactLink, '_blank');
+                                    } else {
+                                        alert('⚠️ 老師尚未設定您的專屬私訊網址喔！\n\n下次見面時，記得提醒老師在後台幫您補上聯絡連結～');
+                                    }
+                                }} 
+                                className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-black rounded-2xl transition shadow-inner border border-white/40 flex items-center w-fit active:scale-95"
+                            >
                                 <i className="fa-brands fa-facebook-messenger mr-3 text-xl"></i> 私訊指導教授
                             </button>
                         </div>
