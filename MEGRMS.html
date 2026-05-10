@@ -262,6 +262,7 @@
             const [showSettings, setShowSettings] = useState(false);
             const [tempKey, setTempKey] = useState(geminiApiKey || '');
             const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash');
+            const [testResult, setTestResult] = useState(null);
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -277,6 +278,33 @@
                 if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
             }, [chatHistory, isLoading, isOpen, showSettings]);
 
+            const handleTestKey = async () => {
+                let clean = tempKey.replace(/[^a-zA-Z0-9_-]/g, '');
+                if (!clean) {
+                    setTestResult({ success: false, msg: `❌ 請先輸入 API Key。` });
+                    return;
+                }
+                if (clean.length !== 39) {
+                    setTestResult({ success: false, msg: `❌ 格式異常：標準 Key 長度應為 39 字元，目前您輸入的是 ${clean.length} 字元。請檢查是否沒複製完整，或多複製了其他文字！` });
+                    return;
+                }
+                setTestResult({ success: null, msg: "⏳ 測試連線中，請稍候..." });
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${clean}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.error) {
+                        throw new Error(data.error?.message || `HTTP ${res.status}`);
+                    }
+                    setTestResult({ success: true, msg: "✅ 連線成功！您的 Key 是正確的！請記得點擊下方【儲存】按鈕。" });
+                } catch (err) {
+                    setTestResult({ success: false, msg: `❌ 連線失敗：${err.message}\n(若顯示 unregistered callers，代表金鑰無效或未開通 API)` });
+                }
+            };
+
             const handleAsk = async () => {
                 if (!query.trim() || isLoading) return;
 
@@ -285,13 +313,13 @@
                 setChatHistory(prev => [...prev, { role: 'user', text: userText }]);
                 setIsLoading(true);
 
-                // 🌟 嚴格清洗 API Key (避免誤存 null 或包含隱形空白)
+                // 🌟 極度嚴格清洗 API Key：只保留英數字、底線、破折號，殺掉所有隱形字元
                 let rawKey = geminiApiKey || '';
                 if (typeof rawKey !== 'string') rawKey = String(rawKey);
-                const cleanKey = rawKey.replace(/['"\[\]\s]/g, '').trim();
+                const cleanKey = rawKey.replace(/[^a-zA-Z0-9_-]/g, '');
 
-                if (!cleanKey || cleanKey === 'undefined' || cleanKey === 'null' || cleanKey === '') {
-                    setChatHistory(prev => [...prev, { role: 'ai', text: '⚠️ **缺少有效的 API Key！**\n\n系統偵測到您的 Key 格式有誤或為空。請點擊右上角的「⚙️ 齒輪」重新貼上您的 Key，並確實按下「儲存」。' }]);
+                if (!cleanKey || cleanKey.length < 30) {
+                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **缺少或無效的 API Key！**\n\n系統擷取到的長度異常 (${cleanKey.length} 字元)。請點擊右上角「⚙️ 齒輪」，清空輸入框後重新貼上您的 Key，並使用【測試】功能檢查。` }]);
                     setIsLoading(false);
                     return;
                 }
@@ -338,7 +366,7 @@ ${JSON.stringify(cleanProjects)}`;
                     console.error("Gemini API Error:", err);
                     let errorMsg = `⚠️ 發生錯誤，無法連接到 Gemini AI。\n\n詳細錯誤：${err.message}`;
                     if (err.message.includes('403') || err.message.includes('unregistered')) {
-                        errorMsg = `⚠️ **API Key 無效或未成功傳遞 (403 錯誤)**\n\n系統擷取到的 Key 是：「${cleanKey.substring(0, 5)}...」無法被 Google 識別。\n👉 請確認複製時沒有多餘字元，點擊「⚙️ 齒輪」重新貼上並**儲存**。`;
+                        errorMsg = `⚠️ **API Key 無效或未成功傳遞 (403 錯誤)**\n\n系統擷取的長度為 ${cleanKey.length} 字元。\n👉 強烈建議點擊「⚙️ 齒輪」打開設定，使用裡面的**【測試】**按鈕來偵錯！`;
                     }
                     setChatHistory(prev => [...prev, { role: 'ai', text: errorMsg }]);
                 } finally {
@@ -388,12 +416,20 @@ ${JSON.stringify(cleanProjects)}`;
                                     <div className="flex gap-2 mb-3">
                                         <input 
                                             type="text" 
-                                            placeholder="請貼上 AIzaSy 開頭的金鑰..." 
+                                            placeholder="請貼上 AIzaSy 開頭的 39 字元金鑰..." 
                                             className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none" 
                                             value={tempKey} 
-                                            onChange={e => setTempKey(e.target.value)} 
+                                            onChange={e => { setTempKey(e.target.value); setTestResult(null); }} 
                                         />
+                                        <button onClick={handleTestKey} className="px-4 py-2.5 bg-blue-50 text-blue-600 font-black rounded-xl border-2 border-blue-200 hover:bg-blue-100 active:scale-95 whitespace-nowrap shadow-sm transition">
+                                            <i className="fa-solid fa-stethoscope mr-1"></i> 測試
+                                        </button>
                                     </div>
+                                    {testResult && (
+                                        <div className={`p-3 rounded-xl mb-3 text-xs font-bold leading-relaxed border-2 shadow-sm ${testResult.success === true ? 'bg-green-50 text-green-700 border-green-200' : testResult.success === false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                                            {testResult.msg}
+                                        </div>
+                                    )}
                                     <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
                                         <i className="fa-solid fa-cube mr-2 text-fuchsia-500"></i> 選擇 AI 模型
                                     </label>
