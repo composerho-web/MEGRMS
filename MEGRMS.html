@@ -493,7 +493,7 @@
                     <div className="fixed inset-0 bg-pink-900/40 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-fade-in">
                         <div className="bg-white rounded-[2rem] w-full max-w-4xl flex flex-col h-[85vh] shadow-[0_20px_50px_rgba(236,72,153,0.3)] overflow-hidden border-4 border-white animate-modal-pop">
                             <div className="bg-gradient-to-r from-pink-400 to-rose-500 p-5 text-white flex justify-between items-center shadow-sm">
-                                <h3 className="font-black text-xl flex items-center tracking-wide"><i className="fa-solid fa-envelope-open-text mr-3 animate-bounce"></i> {role === 'teacher' ? `與 ${student.name} 的交換日記` : '與老師的交換日記'}</h3>
+                                <h3 className="font-black text-xl flex items-center tracking-wide"><i className="fa-solid fa-envelope-open-text mr-3 animate-bounce"></i> {role === 'teacher' ? `與 ${student.name} 的留言白板` : '與老師的留言白板'}</h3>
                                 <button onClick={onClose} className="hover:rotate-90 transition-all duration-300 w-8 h-8 flex justify-center items-center rounded-full bg-white/20"><i className="fa-solid fa-xmark text-xl"></i></button>
                             </div>
                             <div className="p-6 flex-grow flex flex-col bg-pink-50/30 overflow-hidden relative">
@@ -769,14 +769,22 @@
                         <h2 className="text-2xl sm:text-3xl font-black flex items-center drop-shadow-md">
                             <img src="https://i.ibb.co/LWGmHR7/unnamed-6.png" className="w-10 h-10 sm:w-12 sm:h-12 mr-4 object-contain drop-shadow-md" alt="logo" />哈囉，{studentName}！歡迎回來。
                         </h2>
-                        <button onClick={() => { currentStudentObj.contactLink ? window.open(currentStudentObj.contactLink, '_blank') : alert('⚠️ 老師尚未設定您的專屬私訊網址喔！'); }} className="px-6 py-3 bg-white/20 text-white font-black rounded-2xl flex items-center w-fit hover:bg-white/30 transition-colors">私訊指導教授</button>
+                        <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
+                            <button onClick={() => { currentStudentObj.contactLink ? window.open(currentStudentObj.contactLink, '_blank') : alert('⚠️ 老師尚未設定您的專屬私訊網址喔！'); }} className="px-6 py-3 bg-white/20 text-white font-black rounded-2xl flex items-center w-fit hover:bg-white/30 transition-colors"><i className="fa-brands fa-facebook-messenger mr-2"></i> 私訊老師</button>
+                            <button onClick={() => { 
+                                if(currentStudentObj.localFolder) { 
+                                    if(currentStudentObj.localFolder.startsWith('http')) { window.open(currentStudentObj.localFolder, '_blank'); }
+                                    else { copyToClipboard(currentStudentObj.localFolder); alert('已複製專屬資料夾路徑：\n' + currentStudentObj.localFolder + '\n\n請在檔案總管貼上並開啟！'); }
+                                } else { alert('⚠️ 老師尚未設定您的專屬資料夾路徑喔！'); } 
+                            }} className="px-6 py-3 bg-white/20 text-white font-black rounded-2xl flex items-center w-fit hover:bg-white/30 transition-colors"><i className="fa-regular fa-folder-open mr-2"></i> 專屬資料夾</button>
+                        </div>
                     </div>
 
                     <div onClick={handleOpenBoard} className={`cursor-pointer rounded-[2rem] border-4 p-6 flex flex-col sm:flex-row items-center justify-between transition-all duration-300 shadow-sm hover:shadow-xl group relative overflow-hidden ${hasUnreadBoard ? 'bg-pink-50 border-pink-300 shadow-[0_0_20px_rgba(244,114,182,0.4)] animate-pulse' : 'bg-white border-pink-100 hover:border-pink-300'}`}>
                         <div className="flex items-center gap-4 relative z-10 w-full sm:w-auto">
                             <div className={`w-16 h-16 shrink-0 rounded-full flex items-center justify-center text-3xl shadow-sm ${hasUnreadBoard ? 'bg-pink-500 text-white animate-bounce' : 'bg-pink-100 text-pink-500 group-hover:bg-pink-500 group-hover:text-white transition-colors'}`}><i className="fa-solid fa-envelope-open-text"></i></div>
                             <div>
-                                <h3 className="text-2xl font-black text-pink-800 flex items-center gap-2 flex-wrap">師生專屬交換日記 (共編區) {hasUnreadBoard && <span className="text-xs bg-rose-500 text-white px-3 py-1 rounded-full font-black animate-bounce shadow-sm">老師有新回覆！</span>}</h3>
+                                <h3 className="text-2xl font-black text-pink-800 flex items-center gap-2 flex-wrap">師生留言白板 (共編區) {hasUnreadBoard && <span className="text-xs bg-rose-500 text-white px-3 py-1 rounded-full font-black animate-bounce shadow-sm">老師有新回覆！</span>}</h3>
                                 <p className="text-sm font-bold text-pink-500/80 mt-1">在這裡與老師進行一對一的悄悄話或問題討論～🐾</p>
                             </div>
                         </div>
@@ -1209,9 +1217,15 @@
                           <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-3 border-b-2 border-indigo-50 pb-3">
                               <span className="font-black text-xl text-slate-800">{student.name}</span>
                               <div className="flex flex-wrap gap-1">
-                                  <button onClick={() => { setOpenSharedBoardStudent(student); if (hasUnreadBoardTeacher) { const updated = { ...student, boardUnreadTeacher: false }; setStudents(students.map(s => s.id === student.id ? updated : s)); syncToBackend('updateStudent', updated); } }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition border ${hasUnreadBoardTeacher ? 'bg-pink-100 text-pink-600 border-pink-300 animate-pulse' : 'bg-slate-50 text-slate-600 border-slate-200'}`}><i className="fa-solid fa-envelope-open-text"></i></button>
-                                  <button onClick={() => setEditingStudent(student)} className="w-8 h-8 bg-slate-50 hover:bg-purple-100 text-slate-600 hover:text-purple-600 rounded-lg flex items-center justify-center border border-slate-200"><i className="fa-solid fa-pen"></i></button>
-                                  <button onClick={() => student.contactLink ? window.open(student.contactLink, '_blank') : alert('未設定聯絡網址，請點擊編輯設定')} className={`w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 ${student.contactLink ? 'bg-sky-50 text-sky-500' : 'bg-slate-50 text-slate-300'}`}><i className="fa-brands fa-facebook-messenger"></i></button>
+                                  <button onClick={() => { setOpenSharedBoardStudent(student); if (hasUnreadBoardTeacher) { const updated = { ...student, boardUnreadTeacher: false }; setStudents(students.map(s => s.id === student.id ? updated : s)); syncToBackend('updateStudent', updated); } }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition border ${hasUnreadBoardTeacher ? 'bg-pink-100 text-pink-600 border-pink-300 animate-pulse' : 'bg-slate-50 text-slate-600 border-slate-200'}`} title="留言白板"><i className="fa-solid fa-envelope-open-text"></i></button>
+                                  <button onClick={() => { 
+                                      if(student.localFolder) { 
+                                          if(student.localFolder.startsWith('http')) { window.open(student.localFolder, '_blank'); }
+                                          else { copyToClipboard(student.localFolder); alert('已複製本機資料夾路徑：\n' + student.localFolder + '\n\n請在檔案總管貼上開啟！'); }
+                                      } else { alert('未設定資料夾路徑，請點擊編輯設定'); }
+                                  }} className={`w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 ${student.localFolder ? 'bg-amber-50 text-amber-500 hover:bg-amber-100' : 'bg-slate-50 text-slate-300'}`} title="專屬資料夾"><i className="fa-solid fa-folder-open"></i></button>
+                                  <button onClick={() => setEditingStudent(student)} className="w-8 h-8 bg-slate-50 hover:bg-purple-100 text-slate-600 hover:text-purple-600 rounded-lg flex items-center justify-center border border-slate-200" title="編輯學生"><i className="fa-solid fa-pen"></i></button>
+                                  <button onClick={() => student.contactLink ? window.open(student.contactLink, '_blank') : alert('未設定聯絡網址，請點擊編輯設定')} className={`w-8 h-8 rounded-lg flex items-center justify-center border border-slate-200 ${student.contactLink ? 'bg-sky-50 text-sky-500 hover:bg-sky-100' : 'bg-slate-50 text-slate-300'}`} title="聯絡學生"><i className="fa-brands fa-facebook-messenger"></i></button>
                               </div>
                           </div>
                           <div className="mb-4 bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100 flex flex-col relative group">
@@ -1307,6 +1321,7 @@
                               <div className="p-6 bg-slate-50 space-y-4">
                                   <div><label className="text-sm font-bold block mb-1">姓名 *</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold" value={newStudent.name} onChange={(e) => setNewStudent({...newStudent, name: e.target.value})} /></div>
                                   <div><label className="text-sm font-bold block mb-1">登入 Email *</label><input type="email" className="w-full p-3 border-2 rounded-xl bg-white font-bold" value={newStudent.email} onChange={(e) => setNewStudent({...newStudent, email: e.target.value})} /></div>
+                                  <div><label className="text-sm font-bold block mb-1">專屬資料夾 (雲端網址或本機路徑)</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold" value={newStudent.localFolder || ''} onChange={(e) => setNewStudent({...newStudent, localFolder: e.target.value})} placeholder="例如: C:\MEG\學生A 或 https://drive..." /></div>
                                   <div className="flex justify-end gap-3 mt-6"><button onClick={() => setIsAddStudentOpen(false)} className="px-5 py-2.5 bg-slate-200 font-bold rounded-xl">取消</button><button onClick={handleAddStudent} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl">新增</button></div>
                               </div>
                           </div>
@@ -1322,7 +1337,8 @@
                               <div className="p-6 bg-slate-50 space-y-4 max-h-[70vh] overflow-y-auto">
                                   <div><label className="text-sm font-bold block mb-1">姓名</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold" value={editingStudent.name} onChange={(e) => setEditingStudent({...editingStudent, name: e.target.value})} /></div>
                                   <div><label className="text-sm font-bold block mb-1">Email</label><input type="email" className="w-full p-3 border-2 rounded-xl bg-white font-bold" value={editingStudent.email} onChange={(e) => setEditingStudent({...editingStudent, email: e.target.value})} /></div>
-                                  <div><label className="text-sm font-bold block mb-1">聯絡網址</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold text-sky-600" value={editingStudent.contactLink || ''} onChange={(e) => setEditingStudent({...editingStudent, contactLink: e.target.value})} /></div>
+                                  <div><label className="text-sm font-bold block mb-1">聯絡網址</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold text-sky-600" value={editingStudent.contactLink || ''} onChange={(e) => setEditingStudent({...editingStudent, contactLink: e.target.value})} placeholder="Messenger或Line連結" /></div>
+                                  <div><label className="text-sm font-bold block mb-1">專屬資料夾 (雲端網址或本機路徑)</label><input type="text" className="w-full p-3 border-2 rounded-xl bg-white font-bold text-amber-600" value={editingStudent.localFolder || ''} onChange={(e) => setEditingStudent({...editingStudent, localFolder: e.target.value})} placeholder="例如: C:\MEG\學生A 或 https://drive..." /></div>
                                   <div className="flex justify-end gap-3 mt-6"><button onClick={() => setEditingStudent(null)} className="px-5 py-2.5 bg-slate-200 font-bold rounded-xl">取消</button><button onClick={() => { setStudents(students.map(s => s.id === editingStudent.id ? editingStudent : s)); syncToBackend('updateStudent', editingStudent); setEditingStudent(null); }} className="px-5 py-2.5 bg-purple-600 text-white font-black rounded-xl">儲存</button></div>
                               </div>
                           </div>
