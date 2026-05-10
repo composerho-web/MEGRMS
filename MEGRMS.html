@@ -246,7 +246,6 @@
           </div>
         );
 
-        // 🌟 小毛丸 AI 助理 (僅限老師使用)
         const AIAssistantModal = ({ isOpen, onClose, projects, students, conferences, announcements, usefulLinks, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
             const [query, setQuery] = useState('');
             const [chatHistory, setChatHistory] = useState([
@@ -685,7 +684,6 @@ ${JSON.stringify(cleanLinks)}`;
             );
         };
 
-        // 🌟 新增：師生共編交換日記 Modal
         const SharedBoardModal = ({ isOpen, onClose, student, role, onSave }) => {
             const [content, setContent] = useState("");
 
@@ -967,7 +965,6 @@ ${JSON.stringify(cleanLinks)}`;
             const [isAddProjectOpen, setIsAddProjectOpen] = useState(false);
             const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
 
-            // 共編留言板 State
             const [isSharedBoardOpen, setIsSharedBoardOpen] = useState(false);
             const hasUnreadBoard = currentStudentObj.boardUnreadStudent === true;
 
@@ -1026,7 +1023,6 @@ ${JSON.stringify(cleanLinks)}`;
                 }
             };
 
-            // 開啟共編留言板 (消除未讀標記)
             const handleOpenBoard = () => {
                 setIsSharedBoardOpen(true);
                 if (hasUnreadBoard) {
@@ -1036,7 +1032,6 @@ ${JSON.stringify(cleanLinks)}`;
                 }
             };
 
-            // 儲存共編留言板 (設定老師端未讀標記)
             const handleSaveBoard = (studentId, content) => {
                 const updated = { ...currentStudentObj, sharedBoard: content, boardUnreadTeacher: true };
                 setStudents(students.map(s => s.id === currentStudentObj.id ? updated : s));
@@ -1046,7 +1041,6 @@ ${JSON.stringify(cleanLinks)}`;
 
             return (
                 <div className="space-y-8 animate-fade-in pb-20 relative">
-                    {/* 歡迎看板 */}
                     <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] shadow-[0_10px_40px_rgba(99,102,241,0.3)] text-white mb-6 overflow-hidden relative border-4 border-white p-8">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                         <div className="absolute bottom-0 left-0 w-40 h-40 bg-pink-300 opacity-20 rounded-full blur-2xl -ml-10 -mb-10"></div>
@@ -1070,7 +1064,6 @@ ${JSON.stringify(cleanLinks)}`;
                         </div>
                     </div>
 
-                    {/* 🌟 師生共編留言板 (顯眼橫幅) */}
                     <div onClick={handleOpenBoard} className={`cursor-pointer rounded-[2rem] border-4 p-6 flex flex-col sm:flex-row items-center justify-between transition-all duration-300 shadow-sm hover:shadow-xl group relative overflow-hidden ${hasUnreadBoard ? 'bg-pink-50 border-pink-300 shadow-[0_0_20px_rgba(244,114,182,0.4)] animate-pulse' : 'bg-white border-pink-100 hover:border-pink-300'}`}>
                         <div className="absolute top-0 right-0 w-40 h-40 bg-pink-200 opacity-20 rounded-full blur-3xl -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
                         <div className="flex items-center gap-4 relative z-10 w-full sm:w-auto">
@@ -1090,7 +1083,6 @@ ${JSON.stringify(cleanLinks)}`;
                         </button>
                     </div>
 
-                    {/* 共編留言板 Modal */}
                     <SharedBoardModal 
                         isOpen={isSharedBoardOpen} 
                         onClose={() => setIsSharedBoardOpen(false)} 
@@ -1099,7 +1091,6 @@ ${JSON.stringify(cleanLinks)}`;
                         onSave={handleSaveBoard} 
                     />
 
-                    {/* 三大資訊看板並列 */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                         <AnnouncementsBoard announcements={announcements} />
                         <UsefulLinksBoard links={usefulLinks} />
@@ -1164,7 +1155,6 @@ ${JSON.stringify(cleanLinks)}`;
                                 )
                             })}
 
-                            {/* 虛線框：新增專案 */}
                             <Card onClick={() => setIsAddProjectOpen(true)} className="border-dashed border-[4px] border-indigo-200 bg-indigo-50/50 flex flex-col items-center justify-center p-10 hover:bg-indigo-50 hover:border-indigo-400 transition-all cursor-pointer min-h-[350px] group shadow-none hover:shadow-lg">
                                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-5 shadow-sm group-hover:scale-110 transition-transform">
                                     <i className="fa-solid fa-plus text-4xl text-indigo-400 group-hover:text-indigo-600 transition-colors"></i>
@@ -1175,7 +1165,6 @@ ${JSON.stringify(cleanLinks)}`;
                         </div>
                     </div>
 
-                    {/* 新增專案 Modal */}
                     {isAddProjectOpen && (
                         <ModalPortal>
                             <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-center z-[90] p-4 animate-fade-in">
@@ -1213,15 +1202,6 @@ ${JSON.stringify(cleanLinks)}`;
                         </ModalPortal>
                     )}
 
-                    <ProjectNotesModal 
-                        isOpen={!!viewNotesProject} 
-                        project={viewNotesProject} 
-                        onClose={() => setViewNotesProject(null)} 
-                        isTeacher={false} 
-                        markAsRead={markAsRead}
-                    />
-
-                    {/* 申請狀態變更 Modal */}
                     {requestStatusModal && (
                         <ModalPortal>
                             <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-center z-[90] p-4 animate-fade-in">
@@ -1256,7 +1236,6 @@ ${JSON.stringify(cleanLinks)}`;
         };
 
         const TeacherDashboard = ({ projects, setProjects, students, setStudents, conferences, setConferences, announcements, setAnnouncements, usefulLinks, setUsefulLinks, openMarqueeManager, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
-          
           const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
           const [isConfModalOpen, setIsConfModalOpen] = useState(false);
           const [isAnnouncementsModalOpen, setIsAnnouncementsModalOpen] = useState(false);
@@ -1265,47 +1244,34 @@ ${JSON.stringify(cleanLinks)}`;
           const [isAIOpen, setIsAIOpen] = useState(false);
 
           const [manageStudentProjectsId, setManageStudentProjectsId] = useState(null);
-          
           const [editingProjectNotes, setEditingProjectNotes] = useState(null);
           const [pendingApprovalFlow, setPendingApprovalFlow] = useState(null);
-
           const [newStudent, setNewStudent] = useState({ name: '', email: '', degree: '', contactLink: '', localFolder: '' });
-
           const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
           const [newProjectForStudent, setNewProjectForStudent] = useState({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
-          
           const [editingDateProjectId, setEditingDateProjectId] = useState(null);
           const [newDateVal, setNewDateVal] = useState('');
           const [dateReasonVal, setDateReasonVal] = useState('');
-
           const [editingStudent, setEditingStudent] = useState(null);
-          
           const [newConf, setNewConf] = useState({ name: '', url: '', submitDeadline: '', confirmDeadline: '' });
           const [editingConfId, setEditingConfId] = useState(null);
           const [editConfData, setEditConfData] = useState({});
-
           const [newLinkData, setNewLinkData] = useState({ title: '', url: '', description: '' });
           const [editingLinkId, setEditingLinkId] = useState(null);
           const [editLinkData, setEditLinkData] = useState({});
-
           const [editingAnnId, setEditingAnnId] = useState(null);
           const [editAnnTitle, setEditAnnTitle] = useState("");
           const [editAnnContent, setEditAnnContent] = useState("");
-
           const [activeFilter, setActiveFilter] = useState(null);
-
           const [studentSortBy, setStudentSortBy] = useState('default');
           const [studentFilterDegree, setStudentFilterDegree] = useState('all');
           const uniqueDegrees = [...new Set(students.map(s => s.degree).filter(Boolean))];
-
           const [editingNoteStudentId, setEditingNoteStudentId] = useState(null);
           const [tempStudentNote, setTempStudentNote] = useState("");
-
           const [allProjectsSearch, setAllProjectsSearch] = useState("");
           const [allProjectsSort, setAllProjectsSort] = useState("lastUpdate_desc");
           const [allProjectsFilter, setAllProjectsFilter] = useState("all");
 
-          // 共編留言板 State (老師端)
           const [openSharedBoardStudent, setOpenSharedBoardStudent] = useState(null);
 
           const activeProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)');
@@ -2529,9 +2495,40 @@ ${JSON.stringify(cleanLinks)}`;
             </div>
           );
         };
-        
-        const root = ReactDOM.createRoot(document.getElementById('root')); 
-        root.render(<App />);
-    </script>
-</body>
-</html>
+
+        const App = () => {
+          const [currentUser, setCurrentUser] = useState(null); 
+          const TEACHER_EMAIL = "composerho@gmail.com"; 
+          
+          const [students, setStudents] = useState([]); const [projects, setProjects] = useState([]);
+          const [conferences, setConferences] = useState([]); const [announcements, setAnnouncements] = useState([]); const [usefulLinks, setUsefulLinks] = useState([]);
+          const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
+          const [isLoading, setIsLoading] = useState(true);
+
+          const [geminiApiKey, setGeminiApiKey] = useState("");
+          const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash");
+
+          const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
+          const [tempMarquee, setTempMarquee] = useState("");
+          
+          const [showCelebration, setShowCelebration] = useState(false);
+          const [hasCelebrated, setHasCelebrated] = useState(false);
+
+          const openMarqueeManager = () => {
+              setTempMarquee(marqueeText);
+              setIsMarqueeModalOpen(true);
+          };
+
+          useEffect(() => {
+              const overlay = document.getElementById('bg-overlay');
+              if (overlay) {
+                  if (currentUser && currentUser.role !== 'unauthorized') {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-white/40 backdrop-blur-[4px]";
+                  } else {
+                      overlay.className = "fixed top-0 left-0 w-full h-full z-[-1] transition-all duration-1000 bg-transparent backdrop-blur-none";
+                  }
+              }
+          }, [currentUser]);
+
+          useEffect(() => {
+              if (currentUser && currentUser.role !== 'unauthorized' && projects.length > 0 && !hasCelebrated) {
