@@ -252,7 +252,7 @@
           </div>
         );
 
-        // 🌟 更新：MEG 智能助理加入 API Key 設定介面
+        // 🌟 更新：優化 API Key 攔截與模型選單
         const AIAssistantModal = ({ isOpen, onClose, projects, students, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
             const [query, setQuery] = useState('');
             const [chatHistory, setChatHistory] = useState([
@@ -261,12 +261,12 @@
             const [isLoading, setIsLoading] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
             const [tempKey, setTempKey] = useState(geminiApiKey || '');
-            const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash-latest');
+            const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash');
             const chatEndRef = useRef(null);
 
             useEffect(() => {
                 setTempKey(geminiApiKey || '');
-                setTempModel(geminiModel || 'gemini-1.5-flash-latest');
+                setTempModel(geminiModel || 'gemini-1.5-flash');
             }, [geminiApiKey, geminiModel]);
 
             useEffect(() => {
@@ -285,26 +285,25 @@
                 setChatHistory(prev => [...prev, { role: 'user', text: userText }]);
                 setIsLoading(true);
 
-                // 系統預設環境變數 (Canvas 專用)
-                const apiKey = ""; 
-                // 最終採用的 Key (若使用者有填寫，優先採用使用者的)
-                const finalApiKey = geminiApiKey || apiKey;
+                // 🌟 嚴格清洗 API Key (避免誤存 null 或包含隱形空白)
+                let rawKey = geminiApiKey || '';
+                if (typeof rawKey !== 'string') rawKey = String(rawKey);
+                const cleanKey = rawKey.replace(/['"\[\]\s]/g, '').trim();
 
-                if (!finalApiKey) {
-                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **缺少 API Key**\n\n系統偵測到您尚未設定 Gemini API Key，因此無法發送請求。\n請點擊視窗右上角的「⚙️ 齒輪」圖示進行設定。` }]);
+                if (!cleanKey || cleanKey === 'undefined' || cleanKey === 'null' || cleanKey === '') {
+                    setChatHistory(prev => [...prev, { role: 'ai', text: '⚠️ **缺少有效的 API Key！**\n\n系統偵測到您的 Key 格式有誤或為空。請點擊右上角的「⚙️ 齒輪」重新貼上您的 Key，並確實按下「儲存」。' }]);
                     setIsLoading(false);
                     return;
                 }
 
                 try {
-                    const cleanProjects = projects.filter(p => p.status !== '🛑 專案已終止 (下車)').map(p => ({
-                        專案名稱: p.title,
-                        負責乘客: p.studentName,
-                        目前狀態: p.status,
-                        上次更新時間: p.lastUpdate,
-                        預估下階段日期: p.nextStageDate,
-                        指導人員: p.mentors,
-                        備忘錄與註記內容: extractText(p.notes) 
+                    // 🌟 修正傳遞給 AI 的專案屬性對應，讓 AI 能正確讀取資料
+                    const cleanProjects = projects.map(p => ({
+                        專案名稱: p.title || '無名稱',
+                        狀態: p.status || '未知',
+                        負責學生: p.studentName || '未知',
+                        預估下階段時間: p.nextStageDate || '未設定',
+                        備忘錄: p.notes ? extractText(p.notes) : '無'
                     }));
 
                     const systemPrompt = `你是一個 MEG 研究室進度管理系統的專業 AI 助理「MEG 列車長副手」。
@@ -321,12 +320,17 @@ ${JSON.stringify(cleanProjects)}`;
                         systemInstruction: { parts: [{ text: systemPrompt }] }
                     };
 
-                    const targetModel = geminiModel || 'gemini-1.5-flash-latest';
-                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${finalApiKey}`, {
+                    const targetModel = geminiModel || 'gemini-1.5-flash';
+                    const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
+
+                    // 🌟 處理 API 錯誤回傳
+                    if (data.error) {
+                         throw new Error(`(${data.error.code}) ${data.error.message}`);
+                    }
 
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，我目前無法產生回答。";
                     setChatHistory(prev => [...prev, { role: 'ai', text: aiText }]);
@@ -334,7 +338,7 @@ ${JSON.stringify(cleanProjects)}`;
                     console.error("Gemini API Error:", err);
                     let errorMsg = `⚠️ 發生錯誤，無法連接到 Gemini AI。\n\n詳細錯誤：${err.message}`;
                     if (err.message.includes('403') || err.message.includes('unregistered')) {
-                        errorMsg = `⚠️ **API Key 無效或未授權 (403 錯誤)**\n\n這通常是因為您尚未設定 API Key，或者填寫的 Key 不正確。\n👉 請點擊上方「⚙️ 齒輪」圖示輸入您的 Google Gemini API Key。`;
+                        errorMsg = `⚠️ **API Key 無效或未成功傳遞 (403 錯誤)**\n\n系統擷取到的 Key 是：「${cleanKey.substring(0, 5)}...」無法被 Google 識別。\n👉 請確認複製時沒有多餘字元，點擊「⚙️ 齒輪」重新貼上並**儲存**。`;
                     }
                     setChatHistory(prev => [...prev, { role: 'ai', text: errorMsg }]);
                 } finally {
@@ -383,8 +387,8 @@ ${JSON.stringify(cleanProjects)}`;
                                     </p>
                                     <div className="flex gap-2 mb-3">
                                         <input 
-                                            type="password" 
-                                            placeholder="AIzaSy..." 
+                                            type="text" 
+                                            placeholder="請貼上 AIzaSy 開頭的金鑰..." 
                                             className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none" 
                                             value={tempKey} 
                                             onChange={e => setTempKey(e.target.value)} 
@@ -394,15 +398,16 @@ ${JSON.stringify(cleanProjects)}`;
                                         <i className="fa-solid fa-cube mr-2 text-fuchsia-500"></i> 選擇 AI 模型
                                     </label>
                                     <div className="flex gap-2">
+                                        {/* 🌟 簡化模型名稱，移除 -latest 以避免 404 */}
                                         <select 
                                             className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none"
                                             value={tempModel}
                                             onChange={e => setTempModel(e.target.value)}
                                         >
-                                            <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (預設穩定版)</option>
-                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (最新版)</option>
-                                            <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (進階版)</option>
-                                            <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash-8B (輕量版)</option>
+                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash (最穩定推薦)</option>
+                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (最新體驗版)</option>
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (進階高智商)</option>
+                                            <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash-8B (輕量極速)</option>
                                         </select>
                                         <button onClick={() => {
                                             setGeminiApiKey(tempKey);
@@ -2325,9 +2330,9 @@ ${JSON.stringify(cleanProjects)}`;
           const [marqueeText, setMarqueeText] = useState("歡迎搭乘 MEG 新自強3000 列車！");
           const [isLoading, setIsLoading] = useState(true);
 
-          // 🌟 全域狀態：儲存 Gemini API Key 與 模型
+          // 🌟 全域狀態：儲存 Gemini API Key 與 模型 (預設改為純淨名稱)
           const [geminiApiKey, setGeminiApiKey] = useState("");
-          const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash-latest");
+          const [geminiModel, setGeminiModel] = useState("gemini-1.5-flash");
 
           const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState(false);
           const [tempMarquee, setTempMarquee] = useState("");
