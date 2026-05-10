@@ -256,6 +256,7 @@
             const [tempKey, setTempKey] = useState(geminiApiKey || '');
             const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash');
             const [testResult, setTestResult] = useState(null);
+            const [scannedModels, setScannedModels] = useState([]); // 新增掃描到的模型清單
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -267,31 +268,63 @@
                 if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
             }, [chatHistory, isLoading, isOpen, showSettings]);
 
-            const handleTestKey = async () => {
+            // 🌟 全新升級：自動掃描並測試 API 支援的模型
+            const handleScanAndTestKey = async () => {
                 let clean = tempKey.trim().replace(/[^a-zA-Z0-9_-]/g, '');
                 if (!clean) {
                     setTestResult({ success: false, msg: `❌ 請先輸入 API Key。` });
                     return;
                 }
-                setTestResult({ success: null, msg: "⏳ 測試連線中，正在向 Google 伺服器驗證..." });
+                
+                setTestResult({ success: null, msg: "⏳ 正在聯絡 Google 伺服器，掃描您的 Key 支援哪些模型..." });
+                
                 try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${clean}`, {
+                    // 第一步：呼叫 ListModels 取得可用模型清單
+                    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clean}`);
+                    const listData = await listRes.json();
+
+                    if (!listRes.ok) {
+                        throw new Error(listData.error?.message || "無法取得模型清單 (可能 Key 錯誤或權限不足)");
+                    }
+
+                    // 過濾出支援生成內容的模型
+                    const validModels = listData.models
+                        .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+                        .map(m => m.name.replace('models/', ''));
+
+                    setScannedModels(validModels);
+
+                    if (validModels.length === 0) {
+                        return setTestResult({ success: false, msg: "❌ 您的 Key 有效，但該專案內沒有任何支援生成文字的模型權限。請確認您的 Google Cloud 專案設定。" });
+                    }
+
+                    // 決定要用哪個模型測試 (優先使用原本選的，沒有就用掃描到第一個包含 flash 的)
+                    let modelToTest = tempModel;
+                    if (!validModels.includes(modelToTest)) {
+                        modelToTest = validModels.find(m => m.includes('flash')) || validModels[0];
+                        setTempModel(modelToTest);
+                    }
+
+                    // 第二步：使用選定的模型進行生成測試
+                    setTestResult({ success: null, msg: `⏳ 掃描成功！找到 ${validModels.length} 個模型。正在使用 [${modelToTest}] 測試連線...` });
+                    
+                    const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToTest}:generateContent?key=${clean}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: 'Hello' }] }] })
                     });
-                    const data = await res.json();
-                    if (!res.ok) {
-                        const serverError = data.error?.message || "未知錯誤";
-                        throw new Error(serverError);
+                    const testData = await testRes.json();
+
+                    if (!testRes.ok) {
+                        throw new Error(testData.error?.message || `模型 ${modelToTest} 測試失敗`);
                     }
-                    setTestResult({ success: true, msg: "✅ 連線成功！您的 Key 與模型名稱目前完全正確！請記得點擊下方【儲存】。" });
+
+                    setTestResult({ success: true, msg: `✅ 連線大成功！\n已為您掃描並載入所有可用模型，且 [${modelToTest}] 運作正常！請記得點擊下方【儲存】。` });
+
                 } catch (err) {
-                    let errorMsg = `❌ 連線失敗：${err.message}`;
+                    let errorMsg = `❌ 連線或掃描失敗：\n${err.message}`;
                     if (err.message.includes('403') || err.message.includes('unregistered')) {
                         errorMsg = `❌ 連線失敗 (403 未註冊)：\n這代表 Key 的格式對了，但 Google 專案還沒「啟用」權限。\n\n👉 【必殺解法】：\n請回到 Google AI Studio，點擊「Create API key」時，下拉選單務必選擇第一項「Create API key in NEW project」(建立於新專案)，【不要選舊的專案】！這樣權限才會自動開啟。`;
-                    } else if (err.message.includes('400')) {
-                        errorMsg = `❌ 連線失敗 (400 錯誤)：\n可能是請求格式不對或模型名稱寫錯。目前測試使用的模型是「gemini-1.5-flash」。\n\n伺服器回應：${err.message}`;
                     }
                     setTestResult({ success: false, msg: errorMsg });
                 }
@@ -347,7 +380,7 @@ ${JSON.stringify(cleanProjects)}`;
                     setChatHistory(prev => [...prev, { role: 'ai', text: aiText }]);
                 } catch (err) {
                     console.error("Gemini API Error:", err);
-                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **AI 連線異常**\n\n原因：${err.message}\n👉 建議檢查齒輪設定中的 API Key 是否正確。` }]);
+                    setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ **AI 連線異常**\n\n原因：${err.message}\n👉 建議檢查齒輪設定中的 API Key 與模型是否正確。` }]);
                 } finally {
                     setIsLoading(false);
                 }
@@ -381,29 +414,29 @@ ${JSON.stringify(cleanProjects)}`;
                             </div>
                             
                             {showSettings && (
-                                <div className="bg-fuchsia-50 p-5 border-b-2 border-fuchsia-100 animate-fade-in shadow-inner">
+                                <div className="bg-fuchsia-50 p-5 border-b-2 border-fuchsia-100 animate-fade-in shadow-inner overflow-y-auto max-h-[50vh]">
                                     <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
                                         <i className="fa-solid fa-key mr-2 text-fuchsia-500"></i> 設定 Gemini API Key
                                     </label>
-                                    <div className="flex gap-2 mb-3">
+                                    <div className="flex flex-col gap-2 mb-3">
                                         <input 
                                             type="text" 
                                             placeholder="請貼上 AIzaSy 開頭的金鑰..." 
-                                            className="flex-grow p-2.5 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none" 
+                                            className="w-full p-3 rounded-xl border-2 border-fuchsia-200 text-sm font-bold bg-white focus:border-fuchsia-400 outline-none" 
                                             value={tempKey} 
                                             onChange={e => { setTempKey(e.target.value); setTestResult(null); }} 
                                         />
-                                        <button onClick={handleTestKey} className="px-4 py-2.5 bg-blue-50 text-blue-600 font-black rounded-xl border-2 border-blue-200 hover:bg-blue-100 active:scale-95 whitespace-nowrap shadow-sm transition">
-                                            <i className="fa-solid fa-stethoscope mr-1"></i> 測試
+                                        <button onClick={handleScanAndTestKey} className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-black rounded-xl hover:shadow-lg active:scale-95 transition flex justify-center items-center">
+                                            <i className="fa-solid fa-radar mr-2 animate-spin-slow"></i> 掃描可用模型並測試
                                         </button>
                                     </div>
                                     {testResult && (
-                                        <div className={`p-3 rounded-xl mb-3 text-xs font-bold leading-relaxed border-2 shadow-sm whitespace-pre-wrap ${testResult.success === true ? 'bg-green-50 text-green-700 border-green-200' : testResult.success === false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                                        <div className={`p-3 rounded-xl mb-4 text-xs font-bold leading-relaxed border-2 shadow-sm whitespace-pre-wrap ${testResult.success === true ? 'bg-green-50 text-green-700 border-green-200' : testResult.success === false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
                                             {testResult.msg}
                                         </div>
                                     )}
                                     <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
-                                        <i className="fa-solid fa-cube mr-2 text-fuchsia-500"></i> 選擇 AI 模型
+                                        <i className="fa-solid fa-cube mr-2 text-fuchsia-500"></i> 確認要使用的 AI 模型
                                     </label>
                                     <div className="flex gap-2">
                                         <select 
@@ -411,22 +444,29 @@ ${JSON.stringify(cleanProjects)}`;
                                             value={tempModel}
                                             onChange={e => setTempModel(e.target.value)}
                                         >
-                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash (最穩定/免費推薦)</option>
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (高智商/較慢)</option>
-                                            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (最新體驗)</option>
+                                            {scannedModels.length > 0 ? (
+                                                scannedModels.map(m => <option key={m} value={m}>{m}</option>)
+                                            ) : (
+                                                <>
+                                                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (預設)</option>
+                                                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                                    <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash Latest</option>
+                                                    <option value="gemini-1.0-pro">Gemini 1.0 Pro (舊版安全備用)</option>
+                                                </>
+                                            )}
                                         </select>
-                                        <button onClick={() => {
-                                            const finalKey = tempKey.trim();
-                                            setGeminiApiKey(finalKey);
-                                            setGeminiModel(tempModel);
-                                            syncToBackend('updateConfig', { key: 'geminiApiKey', value: finalKey });
-                                            syncToBackend('updateConfig', { key: 'geminiModel', value: tempModel });
-                                            setShowSettings(false);
-                                            alert('✅ API 設定已儲存！');
-                                        }} className="px-4 py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-500 text-white rounded-xl font-black shadow-sm active:scale-95">
-                                            儲存
-                                        </button>
                                     </div>
+                                    <button onClick={() => {
+                                        const finalKey = tempKey.trim();
+                                        setGeminiApiKey(finalKey);
+                                        setGeminiModel(tempModel);
+                                        syncToBackend('updateConfig', { key: 'geminiApiKey', value: finalKey });
+                                        syncToBackend('updateConfig', { key: 'geminiModel', value: tempModel });
+                                        setShowSettings(false);
+                                        alert('✅ API 設定已儲存！');
+                                    }} className="w-full mt-4 py-3 bg-gradient-to-r from-fuchsia-600 to-pink-500 text-white rounded-xl font-black shadow-sm active:scale-95">
+                                        儲存設定
+                                    </button>
                                 </div>
                             )}
 
@@ -742,31 +782,16 @@ ${JSON.stringify(cleanProjects)}`;
 
         const LoginScreen = ({ onLoginSuccess }) => {
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
-          const [showDevLogin, setShowDevLogin] = useState(false);
+          const [showFallbackLogin, setShowFallbackLogin] = useState(false);
           
-          // 使用 useRef 來儲存 onLoginSuccess，避免在 useEffect 依賴中造成無限迴圈重新掛載
           const onLoginSuccessRef = useRef(onLoginSuccess);
           useEffect(() => {
               onLoginSuccessRef.current = onLoginSuccess;
           }, [onLoginSuccess]);
 
           useEffect(() => {
-            let buffer = '';
-            const handleKeyDown = (e) => {
-                buffer += e.key.toLowerCase();
-                if (buffer.length > 6) {
-                    buffer = buffer.slice(-6);
-                }
-                if (buffer === 'hohoho') {
-                    setShowDevLogin(true);
-                    buffer = ''; 
-                }
-            };
-            window.addEventListener('keydown', handleKeyDown);
-
             const CLIENT_ID = "701247251903-878bdbdelfebt7tgm6sdlndtsirmv5li.apps.googleusercontent.com"; 
             
-            // 加入 Polling (輪詢) 機制，確保 Google 腳本確實載入後才渲染按鈕
             const renderGoogleButton = () => {
                 if (window.google && window.google.accounts) {
                     try {
@@ -789,17 +814,11 @@ ${JSON.stringify(cleanProjects)}`;
                         console.error("Google 登入初始化錯誤：", e);
                     }
                 } else {
-                    // 如果腳本還沒載入完，延遲 100 毫秒後再試一次
                     setTimeout(renderGoogleButton, 100);
                 }
             };
-
             renderGoogleButton();
-
-            return () => {
-                window.removeEventListener('keydown', handleKeyDown);
-            };
-          }, []); // 關鍵修正：清空依賴陣列，確保這段初始化邏輯只會執行一次，防止按鈕閃爍消失
+          }, []); 
 
           return (
             <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
@@ -811,21 +830,27 @@ ${JSON.stringify(cleanProjects)}`;
                 </div>
                 <div className="p-8 text-center flex flex-col items-center">
                   <h2 className="text-2xl font-black text-indigo-900 mb-2">乘客請驗票登入 🎫</h2>
-                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4 min-h-[50px] flex items-center justify-center">
+                  
+                  {/* Google 登入按鈕區塊 */}
+                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-2 animate-pulse-glow mt-4 min-h-[60px] flex items-center justify-center">
                       <div id="google-signin-button"></div>
                   </div>
                   
-                  {showDevLogin && (
-                      <div className="w-full animate-fade-in mt-2">
-                          <div className="w-full flex items-center justify-center mb-4 opacity-50">
-                              <div className="h-0.5 bg-gray-300 flex-1"></div>
-                              <span className="px-4 text-xs font-black">開發測試專用</span>
-                              <div className="h-0.5 bg-gray-300 flex-1"></div>
-                          </div>
-                          <div className="w-full bg-slate-50 p-5 rounded-3xl border-2 border-slate-200">
-                              <input type="text" placeholder="輸入 Email..." className="w-full p-3 text-sm border-2 border-slate-200 rounded-xl focus:border-indigo-400 mb-3 font-bold text-center bg-white" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} />
-                              <button onClick={() => onLoginSuccessRef.current(devEmail, '測試用戶', '')} className="w-full py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 shadow-md">模擬上車</button>
-                          </div>
+                  {/* 備用登入入口 (防止 Google 按鈕出不來) */}
+                  <button onClick={() => setShowFallbackLogin(!showFallbackLogin)} className="text-xs font-bold text-indigo-500 hover:text-pink-500 underline transition-colors mb-6">
+                      <i className="fa-solid fa-triangle-exclamation mr-1"></i> 按鈕沒出現或無法點擊？使用備用登入
+                  </button>
+                  
+                  {showFallbackLogin && (
+                      <div className="w-full animate-fade-in mt-2 bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 shadow-inner">
+                          <label className="text-sm font-black text-slate-700 block mb-2">手動驗票通道 (免 Google 帳號)</label>
+                          <input type="text" placeholder="輸入您的登入 Email..." className="w-full p-3 text-sm border-2 border-slate-200 rounded-xl focus:border-indigo-400 mb-3 font-bold text-center bg-white" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} />
+                          <button onClick={() => {
+                              if(!devEmail.includes('@')) return alert('請輸入有效的 Email！');
+                              onLoginSuccessRef.current(devEmail, '乘客 (備用登入)', '');
+                          }} className="w-full py-3 bg-gradient-to-r from-slate-700 to-slate-900 text-white font-black rounded-xl hover:shadow-lg active:scale-95 transition-transform flex justify-center items-center">
+                              <i className="fa-solid fa-train-tram mr-2"></i> 強制上車
+                          </button>
                       </div>
                   )}
                 </div>
