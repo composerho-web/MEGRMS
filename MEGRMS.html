@@ -2508,4 +2508,30 @@ ${JSON.stringify(cleanLinks)}`;
                                                           <input type="text" className="w-full p-2 border-2 border-slate-200 rounded-xl bg-slate-50 font-bold text-sm" placeholder="例如: 王大明, 林小華" value={p.mentors || ''} onChange={(e) => {
                                                               const updated = {...p, mentors: e.target.value};
                                                               setProjects(projects.map(proj => proj.id === p.id ? updated : proj));
-                                                          }} onBlur={(e) => handleUpdateMentors
+                                                          }} onBlur={(e) => handleUpdateMentors(p.id, e.target.value)} />
+                                                      </div>
+                                                      <div className="md:col-span-2 flex items-center justify-between bg-sky-50 p-3 rounded-xl border border-sky-100">
+                                                          <div className="text-sm font-black text-sky-800">
+                                                              <i className="fa-regular fa-calendar-check mr-2"></i>預估抵達下階段: {formatDate(p.nextStageDate) || '尚未設定'}
+                                                          </div>
+                                                          <button onClick={() => setEditingDateProjectId(p.id)} className="bg-sky-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-sky-600 shadow-sm active:scale-95">更改日期</button>
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                          ))
+                                      }
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </ModalPortal>
+              )}
+            </div>
+          );
+        };
+        
+        const root = ReactDOM.createRoot(document.getElementById('root')); 
+        root.render(<App />);
+    </script>
+</body>
+</html>
