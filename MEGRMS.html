@@ -498,7 +498,7 @@
                             </div>
                             <div className="p-6 flex-grow flex flex-col bg-pink-50/30 overflow-hidden relative">
                                 <div className="flex-grow overflow-hidden relative border-2 border-pink-200 rounded-2xl bg-white shadow-inner focus-within:border-pink-400">
-                                    <RichTextEditor initialValue={content} onChange={setContent} readOnly={false} placeholder="寫下你的心情或悄悄話..." />
+                                    <RichTextEditor key={student.id} initialValue={content} onChange={setContent} readOnly={false} placeholder="寫下你的心情或悄悄話..." />
                                 </div>
                                 <div className="flex justify-end gap-4 mt-6 pt-4 border-t-2 border-pink-100">
                                     <button onClick={onClose} className="px-6 py-3 bg-gray-100 text-gray-600 font-black rounded-2xl">取消</button>
