@@ -301,7 +301,11 @@
                     }
                     setTestResult({ success: true, msg: "✅ 連線成功！您的 Key 是正確的！請記得點擊下方【儲存】按鈕。" });
                 } catch (err) {
-                    setTestResult({ success: false, msg: `❌ 連線失敗：${err.message}\n(若顯示 unregistered callers，代表金鑰無效或未開通 API)` });
+                    let errorMsg = `❌ 連線失敗：${err.message}`;
+                    if (err.message.includes('403') || err.message.includes('unregistered')) {
+                        errorMsg = `❌ 連線失敗 (403 未註冊)：\n金鑰格式完全正確，但該專案尚未開通 Gemini API 權限。\n\n👉 【必殺解法】：\n請回到 Google AI Studio，點擊「Create API key」時，下拉選單務必選擇第一項「Create API key in NEW project」(建立於新專案)，【絕對不要選現有的舊專案】！這樣 Google 才會自動幫您開啟 API 權限！拿新專案的鑰匙來測就一定會過！`;
+                    }
+                    setTestResult({ success: false, msg: errorMsg });
                 }
             };
 
@@ -426,7 +430,7 @@ ${JSON.stringify(cleanProjects)}`;
                                         </button>
                                     </div>
                                     {testResult && (
-                                        <div className={`p-3 rounded-xl mb-3 text-xs font-bold leading-relaxed border-2 shadow-sm ${testResult.success === true ? 'bg-green-50 text-green-700 border-green-200' : testResult.success === false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                                        <div className={`p-3 rounded-xl mb-3 text-xs font-bold leading-relaxed border-2 shadow-sm whitespace-pre-wrap ${testResult.success === true ? 'bg-green-50 text-green-700 border-green-200' : testResult.success === false ? 'bg-red-50 text-red-600 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
                                             {testResult.msg}
                                         </div>
                                     )}
