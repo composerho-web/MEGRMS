@@ -246,17 +246,18 @@
           </div>
         );
 
-        const AIAssistantModal = ({ isOpen, onClose, projects, students, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
+        // 🌟 擴增 AI Assistant 接收所有資料 Props
+        const AIAssistantModal = ({ isOpen, onClose, projects, students, conferences, announcements, usefulLinks, geminiApiKey, setGeminiApiKey, geminiModel, setGeminiModel }) => {
             const [query, setQuery] = useState('');
             const [chatHistory, setChatHistory] = useState([
-                { role: 'ai', text: '嗨！我是 **MEG 列車長智能助理** 🤖✨\n\n我已經讀取了系統中所有的專案資料、更新日期以及備忘錄內容。您可以問我任何問題，例如：\n* 「幫我整理有哪些專案目前進度落後？」\n* 「備忘錄裡面提到轉投或退稿的專案有哪幾個？」\n* 「請列出下個禮拜死線即將到期的專案。」\n\n請問有什麼我可以幫忙的嗎？' }
+                { role: 'ai', text: '嗨！我是 **MEG 列車長智能助理** 🤖✨\n\n我已經讀取了系統中所有的專案資料、學生清單、研討會死線以及最新公告。\n您可以問我任何問題，例如：\n* 「幫我整理有哪些專案目前進度落後？」\n* 「這禮拜有什麼研討會要截稿嗎？」\n* 「請幫我列出碩士班學生的專案狀態。」\n\n請問有什麼我可以幫忙的嗎？' }
             ]);
             const [isLoading, setIsLoading] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
             const [tempKey, setTempKey] = useState(geminiApiKey || '');
             const [tempModel, setTempModel] = useState(geminiModel || 'gemini-1.5-flash');
             const [testResult, setTestResult] = useState(null);
-            const [scannedModels, setScannedModels] = useState([]); // 新增掃描到的模型清單
+            const [scannedModels, setScannedModels] = useState([]); 
             const chatEndRef = useRef(null);
 
             useEffect(() => {
@@ -268,7 +269,6 @@
                 if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
             }, [chatHistory, isLoading, isOpen, showSettings]);
 
-            // 🌟 全新升級：自動掃描並測試 API 支援的模型
             const handleScanAndTestKey = async () => {
                 let clean = tempKey.trim().replace(/[^a-zA-Z0-9_-]/g, '');
                 if (!clean) {
@@ -279,7 +279,6 @@
                 setTestResult({ success: null, msg: "⏳ 正在聯絡 Google 伺服器，掃描您的 Key 支援哪些模型..." });
                 
                 try {
-                    // 第一步：呼叫 ListModels 取得可用模型清單
                     const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clean}`);
                     const listData = await listRes.json();
 
@@ -287,7 +286,6 @@
                         throw new Error(listData.error?.message || "無法取得模型清單 (可能 Key 錯誤或權限不足)");
                     }
 
-                    // 過濾出支援生成內容的模型
                     const validModels = listData.models
                         .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
                         .map(m => m.name.replace('models/', ''));
@@ -298,14 +296,12 @@
                         return setTestResult({ success: false, msg: "❌ 您的 Key 有效，但該專案內沒有任何支援生成文字的模型權限。請確認您的 Google Cloud 專案設定。" });
                     }
 
-                    // 決定要用哪個模型測試 (優先使用原本選的，沒有就用掃描到第一個包含 flash 的)
                     let modelToTest = tempModel;
                     if (!validModels.includes(modelToTest)) {
                         modelToTest = validModels.find(m => m.includes('flash')) || validModels[0];
                         setTempModel(modelToTest);
                     }
 
-                    // 第二步：使用選定的模型進行生成測試
                     setTestResult({ success: null, msg: `⏳ 掃描成功！找到 ${validModels.length} 個模型。正在使用 [${modelToTest}] 測試連線...` });
                     
                     const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToTest}:generateContent?key=${clean}`, {
@@ -347,6 +343,7 @@
                 }
 
                 try {
+                    // 🌟 整理包含所有模組的乾淨 JSON 資料庫
                     const cleanProjects = projects.map(p => ({
                         專案名稱: p.title || '無名稱',
                         狀態: p.status || '未知',
@@ -355,14 +352,50 @@
                         備忘錄: p.notes ? extractText(p.notes) : '無'
                     }));
 
+                    const cleanStudents = (students || []).map(s => ({
+                        姓名: s.name,
+                        信箱: s.email,
+                        學制: s.degree || '未填寫',
+                        老師指導紀錄: s.notes ? extractText(s.notes) : '無'
+                    }));
+
+                    const cleanConferences = (conferences || []).map(c => ({
+                        研討會名稱: c.name,
+                        大會截稿日: c.submitDeadline || '未提供',
+                        老師要求死線: c.confirmDeadline || '未提供'
+                    }));
+
+                    const cleanAnnouncements = (announcements || []).map(a => ({
+                        公告標題: a.title,
+                        公告日期: a.date ? formatDate(a.date) : '未知',
+                        公告內容: a.content ? extractText(a.content) : ''
+                    }));
+
+                    const cleanLinks = (usefulLinks || []).map(l => ({
+                        連結標題: l.title,
+                        說明: l.description || '無'
+                    }));
+
                     const systemPrompt = `你是一個 MEG 研究室進度管理系統的專業 AI 助理「MEG 列車長副手」。
-你擁有目前系統內活躍專案的完整資料庫（以 JSON 格式提供）。
+你擁有目前系統內「所有資料庫」的完整權限（以 JSON 格式提供，包含專案、學生名單、研討會、公告、常用連結）。
 請根據這些資料，以友善、專業、鼓勵的語氣回答使用者的問題。
-回答請盡量有條理，並使用 Markdown 語法（例如列點、粗體）。如果需要列出多個專案，請排版整齊。
+回答請盡量有條理，並使用 Markdown 語法（例如列點、粗體）。
 若資料中找不到答案，請誠實告知，不要捏造。
 
-【目前活躍專案資料庫】：
-${JSON.stringify(cleanProjects)}`;
+【目前專案資料庫】：
+${JSON.stringify(cleanProjects)}
+
+【學生名單與指導紀錄】：
+${JSON.stringify(cleanStudents)}
+
+【近期研討會行事曆】：
+${JSON.stringify(cleanConferences)}
+
+【列車公告欄】：
+${JSON.stringify(cleanAnnouncements)}
+
+【百寶袋常用連結】：
+${JSON.stringify(cleanLinks)}`;
 
                     const payload = {
                         contents: [{ parts: [{ text: userText }] }],
@@ -492,7 +525,7 @@ ${JSON.stringify(cleanProjects)}`;
                                             <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce"></div>
                                             <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                                             <div className="w-2 h-2 bg-fuchsia-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                                            <span className="text-xs font-bold text-fuchsia-600 ml-2">正在分析專案資料庫...</span>
+                                            <span className="text-xs font-bold text-fuchsia-600 ml-2">正在分析專案與全站庫資料...</span>
                                         </div>
                                     </div>
                                 )}
@@ -504,7 +537,7 @@ ${JSON.stringify(cleanProjects)}`;
                                     <textarea 
                                         className="w-full p-3 pr-14 border-2 border-slate-200 rounded-2xl bg-slate-50 focus:border-fuchsia-400 focus:bg-white transition-colors outline-none resize-none font-bold text-sm text-slate-700" 
                                         rows="2" 
-                                        placeholder="詢問有關專案的任何問題..." 
+                                        placeholder="詢問有關專案、公告或研討會的問題..." 
                                         value={query} 
                                         onChange={(e) => setQuery(e.target.value)}
                                         onKeyDown={handleKeyDown}
@@ -782,7 +815,7 @@ ${JSON.stringify(cleanProjects)}`;
 
         const LoginScreen = ({ onLoginSuccess }) => {
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
-          const [showFallbackLogin, setShowFallbackLogin] = useState(false);
+          const [showDevLogin, setShowDevLogin] = useState(false);
           
           const onLoginSuccessRef = useRef(onLoginSuccess);
           useEffect(() => {
@@ -790,6 +823,20 @@ ${JSON.stringify(cleanProjects)}`;
           }, [onLoginSuccess]);
 
           useEffect(() => {
+            // 🌟 恢復秘密通道邏輯 hohoho
+            let buffer = '';
+            const handleKeyDown = (e) => {
+                buffer += e.key.toLowerCase();
+                if (buffer.length > 6) {
+                    buffer = buffer.slice(-6);
+                }
+                if (buffer === 'hohoho') {
+                    setShowDevLogin(true);
+                    buffer = ''; 
+                }
+            };
+            window.addEventListener('keydown', handleKeyDown);
+
             const CLIENT_ID = "701247251903-878bdbdelfebt7tgm6sdlndtsirmv5li.apps.googleusercontent.com"; 
             
             const renderGoogleButton = () => {
@@ -818,6 +865,10 @@ ${JSON.stringify(cleanProjects)}`;
                 }
             };
             renderGoogleButton();
+
+            return () => {
+                window.removeEventListener('keydown', handleKeyDown);
+            };
           }, []); 
 
           return (
@@ -832,16 +883,12 @@ ${JSON.stringify(cleanProjects)}`;
                   <h2 className="text-2xl font-black text-indigo-900 mb-2">乘客請驗票登入 🎫</h2>
                   
                   {/* Google 登入按鈕區塊 */}
-                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-2 animate-pulse-glow mt-4 min-h-[60px] flex items-center justify-center">
+                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4 min-h-[60px] flex items-center justify-center">
                       <div id="google-signin-button"></div>
                   </div>
                   
-                  {/* 備用登入入口 (防止 Google 按鈕出不來) */}
-                  <button onClick={() => setShowFallbackLogin(!showFallbackLogin)} className="text-xs font-bold text-indigo-500 hover:text-pink-500 underline transition-colors mb-6">
-                      <i className="fa-solid fa-triangle-exclamation mr-1"></i> 按鈕沒出現或無法點擊？使用備用登入
-                  </button>
-                  
-                  {showFallbackLogin && (
+                  {/* 🌟 隱藏的開發者登入區塊，按鍵盤 hohoho 才會出現 */}
+                  {showDevLogin && (
                       <div className="w-full animate-fade-in mt-2 bg-slate-50 p-5 rounded-3xl border-2 border-slate-200 shadow-inner">
                           <label className="text-sm font-black text-slate-700 block mb-2">手動驗票通道 (免 Google 帳號)</label>
                           <input type="text" placeholder="輸入您的登入 Email..." className="w-full p-3 text-sm border-2 border-slate-200 rounded-xl focus:border-indigo-400 mb-3 font-bold text-center bg-white" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} />
@@ -1648,6 +1695,9 @@ ${JSON.stringify(cleanProjects)}`;
                   onClose={() => setIsAIOpen(false)} 
                   projects={projects} 
                   students={students} 
+                  conferences={conferences}
+                  announcements={announcements}
+                  usefulLinks={usefulLinks}
                   geminiApiKey={geminiApiKey}
                   setGeminiApiKey={setGeminiApiKey}
                   geminiModel={geminiModel}
@@ -2364,6 +2414,9 @@ ${JSON.stringify(cleanProjects)}`;
                   onClose={() => setIsAIOpen(false)} 
                   projects={projects} 
                   students={students} 
+                  conferences={conferences}
+                  announcements={announcements}
+                  usefulLinks={usefulLinks}
                   geminiApiKey={geminiApiKey}
                   setGeminiApiKey={setGeminiApiKey}
                   geminiModel={geminiModel}
