@@ -13,7 +13,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- 加入灑花特效與 Markdown 渲染所需的函式庫 -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
@@ -49,7 +48,6 @@
         .rich-content u { text-decoration: underline; text-decoration-color: #818cf8; text-decoration-thickness: 3px;}
         .rich-content strike { text-decoration: line-through; color: #9ca3af; }
 
-        /* AI 聊天區專用 Markdown 樣式 */
         .ai-markdown { font-size: 0.95rem; line-height: 1.6; }
         .ai-markdown p { margin-bottom: 0.75rem; }
         .ai-markdown p:last-child { margin-bottom: 0; }
@@ -190,7 +188,6 @@
           });
         };
 
-        // 🌟 更新：改良的 Fetch 工具，遇到 403 會提早結束不浪費時間重試
         const fetchWithRetry = async (url, options, retries = 5) => {
             const delays = [1000, 2000, 4000, 8000, 16000];
             for (let i = 0; i < retries; i++) {
@@ -370,7 +367,6 @@ ${JSON.stringify(cleanProjects)}`;
                     <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-end z-[100] sm:p-4 animate-fade-in">
                         <div className="bg-white sm:rounded-[2rem] w-full h-full sm:h-[90vh] sm:max-w-md flex flex-col shadow-[0_20px_50px_rgb(0,0,0,0.3)] overflow-hidden border-4 border-white animate-modal-pop">
                             
-                            {/* Header */}
                             <div className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 animate-ai-bg p-5 text-white flex justify-between items-center shadow-sm">
                                 <h3 className="font-black text-xl flex items-center tracking-wide">
                                     <i className="fa-solid fa-sparkles mr-3 text-yellow-300 animate-pulse"></i> 
@@ -384,7 +380,6 @@ ${JSON.stringify(cleanProjects)}`;
                                 </div>
                             </div>
                             
-                            {/* API 設定區塊 */}
                             {showSettings && (
                                 <div className="bg-fuchsia-50 p-5 border-b-2 border-fuchsia-100 animate-fade-in shadow-inner">
                                     <label className="text-sm font-black text-fuchsia-900 block mb-2 flex items-center">
@@ -435,7 +430,6 @@ ${JSON.stringify(cleanProjects)}`;
                                 </div>
                             )}
 
-                            {/* Chat History */}
                             <div className="flex-grow p-5 overflow-y-auto bg-slate-50 flex flex-col gap-4 thin-scrollbar">
                                 {chatHistory.map((msg, idx) => (
                                     <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -465,7 +459,6 @@ ${JSON.stringify(cleanProjects)}`;
                                 <div ref={chatEndRef} />
                             </div>
 
-                            {/* Input Area */}
                             <div className="p-4 bg-white border-t-2 border-slate-100">
                                 <div className="relative">
                                     <textarea 
@@ -750,6 +743,12 @@ ${JSON.stringify(cleanProjects)}`;
         const LoginScreen = ({ onLoginSuccess }) => {
           const [devEmail, setDevEmail] = useState('composerho@gmail.com');
           const [showDevLogin, setShowDevLogin] = useState(false);
+          
+          // 使用 useRef 來儲存 onLoginSuccess，避免在 useEffect 依賴中造成無限迴圈重新掛載
+          const onLoginSuccessRef = useRef(onLoginSuccess);
+          useEffect(() => {
+              onLoginSuccessRef.current = onLoginSuccess;
+          }, [onLoginSuccess]);
 
           useEffect(() => {
             let buffer = '';
@@ -766,21 +765,41 @@ ${JSON.stringify(cleanProjects)}`;
             window.addEventListener('keydown', handleKeyDown);
 
             const CLIENT_ID = "701247251903-878bdbdelfebt7tgm6sdlndtsirmv5li.apps.googleusercontent.com"; 
-            if (window.google) {
-              window.google.accounts.id.initialize({
-                client_id: CLIENT_ID,
-                callback: (response) => {
-                  const payload = JSON.parse(atob(response.credential.split('.')[1]));
-                  onLoginSuccess(payload.email, payload.name, payload.picture);
+            
+            // 加入 Polling (輪詢) 機制，確保 Google 腳本確實載入後才渲染按鈕
+            const renderGoogleButton = () => {
+                if (window.google && window.google.accounts) {
+                    try {
+                        window.google.accounts.id.initialize({
+                            client_id: CLIENT_ID,
+                            callback: (response) => {
+                                try {
+                                    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+                                    onLoginSuccessRef.current(payload.email, payload.name, payload.picture);
+                                } catch (err) {
+                                    console.error("登入資料解析失敗：", err);
+                                    alert("登入驗證失敗，請重試！");
+                                }
+                            }
+                        });
+                        window.google.accounts.id.renderButton(document.getElementById("google-signin-button"), { 
+                            theme: "outline", size: "large", width: 280, text: "continue_with" 
+                        });
+                    } catch (e) {
+                        console.error("Google 登入初始化錯誤：", e);
+                    }
+                } else {
+                    // 如果腳本還沒載入完，延遲 100 毫秒後再試一次
+                    setTimeout(renderGoogleButton, 100);
                 }
-              });
-              window.google.accounts.id.renderButton(document.getElementById("google-signin-button"), { theme: "outline", size: "large", width: 280, text: "continue_with" });
-            }
+            };
+
+            renderGoogleButton();
 
             return () => {
                 window.removeEventListener('keydown', handleKeyDown);
             };
-          }, [onLoginSuccess]);
+          }, []); // 關鍵修正：清空依賴陣列，確保這段初始化邏輯只會執行一次，防止按鈕閃爍消失
 
           return (
             <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
@@ -792,7 +811,9 @@ ${JSON.stringify(cleanProjects)}`;
                 </div>
                 <div className="p-8 text-center flex flex-col items-center">
                   <h2 className="text-2xl font-black text-indigo-900 mb-2">乘客請驗票登入 🎫</h2>
-                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4"><div id="google-signin-button"></div></div>
+                  <div className="p-2 bg-indigo-50 rounded-2xl border-2 border-indigo-100 mb-6 animate-pulse-glow mt-4 min-h-[50px] flex items-center justify-center">
+                      <div id="google-signin-button"></div>
+                  </div>
                   
                   {showDevLogin && (
                       <div className="w-full animate-fade-in mt-2">
@@ -803,7 +824,7 @@ ${JSON.stringify(cleanProjects)}`;
                           </div>
                           <div className="w-full bg-slate-50 p-5 rounded-3xl border-2 border-slate-200">
                               <input type="text" placeholder="輸入 Email..." className="w-full p-3 text-sm border-2 border-slate-200 rounded-xl focus:border-indigo-400 mb-3 font-bold text-center bg-white" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} />
-                              <button onClick={() => onLoginSuccess(devEmail, '測試用戶', '')} className="w-full py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 shadow-md">模擬上車</button>
+                              <button onClick={() => onLoginSuccessRef.current(devEmail, '測試用戶', '')} className="w-full py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 shadow-md">模擬上車</button>
                           </div>
                       </div>
                   )}
@@ -1480,7 +1501,6 @@ ${JSON.stringify(cleanProjects)}`;
                 </div>
               </div>
 
-              {/* 🌟 列車總覽：所有專案列表區塊 */}
               <div className="pt-12">
                   <div className="flex flex-col lg:flex-row justify-between items-end mb-6 gap-4 border-b-2 border-indigo-100 pb-4">
                       <div className="w-full lg:w-auto">
@@ -2501,4 +2521,49 @@ ${JSON.stringify(cleanProjects)}`;
                   <StudentWorkspace 
                       student={currentUser.studentData} 
                       students={students} setStudents={setStudents} 
-                      projects={projects} setProjects={setProjects}
+                      projects={projects} setProjects={setProjects} 
+                      conferences={conferences} 
+                      announcements={announcements} 
+                      usefulLinks={usefulLinks} 
+                      geminiApiKey={geminiApiKey} setGeminiApiKey={setGeminiApiKey}
+                      geminiModel={geminiModel} setGeminiModel={setGeminiModel}
+                  />
+                }
+              </main>
+              
+              <footer className="text-center py-6 text-sm font-black text-slate-500/70 z-10 relative mt-auto">
+                 <p>(C)Copyright NTUSTMEG 2026，內部系統具機密性請勿外流</p>
+              </footer>
+
+              {isMarqueeModalOpen && (
+                  <ModalPortal>
+                      <div className="fixed inset-0 bg-indigo-900/40 backdrop-blur-sm flex items-center justify-center z-[80] p-4 animate-fade-in">
+                          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 text-white flex justify-between items-center">
+                                  <h3 className="font-black text-xl"><i className="fa-solid fa-tower-broadcast mr-3"></i> 設定全站跑馬燈廣播</h3>
+                                  <button onClick={() => setIsMarqueeModalOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                              </div>
+                              <div className="p-6 bg-slate-50">
+                                  <textarea className="w-full p-4 border-2 border-slate-200 rounded-xl bg-white font-bold resize-none focus:border-indigo-400" rows="3" placeholder="請輸入廣播訊息..." value={tempMarquee} onChange={(e) => setTempMarquee(e.target.value)}></textarea>
+                                  <div className="flex justify-end gap-3 mt-4">
+                                      <button onClick={() => setIsMarqueeModalOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95">取消</button>
+                                      <button onClick={() => {
+                                          setMarqueeText(tempMarquee);
+                                          syncToBackend('updateConfig', { key: 'marqueeText', value: tempMarquee });
+                                          setIsMarqueeModalOpen(false);
+                                      }} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95">更新廣播</button>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </ModalPortal>
+              )}
+            </div>
+          );
+        };
+        
+        const root = ReactDOM.createRoot(document.getElementById('root')); 
+        root.render(<App />);
+    </script>
+</body>
+</html>
