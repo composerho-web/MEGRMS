@@ -912,13 +912,48 @@ ${JSON.stringify(cleanLinks)}`;
           );
         };
 
-        // 🌟 學生介面 (已為您還原)
+        // 🌟 學生介面 (已完整還原「新增專案」功能)
         const StudentWorkspace = ({ student, projects, setProjects, conferences, announcements, usefulLinks, students, setStudents }) => {
             const myProjects = projects.filter(p => p.studentId === student.id && p.status !== '🛑 專案已終止 (下車)');
             const [requestStatusModal, setRequestStatusModal] = useState(null);
             const [requestDesc, setRequestDesc] = useState('');
             const [selectedNewStatus, setSelectedNewStatus] = useState(STATUSES[0]);
             const [viewNotesProject, setViewNotesProject] = useState(null);
+            
+            // 新增專案所需的 State
+            const [isAddProjectOpen, setIsAddProjectOpen] = useState(false);
+            const [newProject, setNewProject] = useState({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
+
+            const handleAddProject = () => {
+                if (!newProject.title) return alert("專案名稱為必填！");
+                if (!newProject.initialDescription || newProject.initialDescription.trim().length < 10) {
+                    return alert("初步說明至少需要填寫 10 個字喔！");
+                }
+                
+                const initialNote = `<p><b>[${new Date().toLocaleDateString('zh-TW')}] 🆕 專案已由 ${student.name} 建立。</b><br>初步說明：${newProject.initialDescription}</p>`;
+                
+                const isConfAccepted = newProject.status.includes('研討會已被接受');
+                const isJournalAccepted = newProject.status.includes('期刊已被接受');
+
+                const p = { 
+                    id: 'p' + Date.now(), 
+                    studentId: student.id, 
+                    studentName: student.name, 
+                    title: newProject.title, 
+                    status: newProject.status, 
+                    mentors: newProject.mentors,
+                    lastUpdate: new Date().toISOString().split('T')[0], 
+                    pendingStatus: null,
+                    notes: initialNote,
+                    hasConfAccepted: isConfAccepted,
+                    hasJournalAccepted: isJournalAccepted
+                };
+                const updated = [...projects, p];
+                setProjects(updated);
+                syncToBackend('addProject', p);
+                setIsAddProjectOpen(false);
+                setNewProject({ title: '', status: STATUSES[0], mentors: '', initialDescription: '' });
+            };
 
             const handleRequestStatusChange = () => {
                 if (!selectedNewStatus || !requestDesc) return alert("請選擇新狀態並填寫說明！");
@@ -961,12 +996,20 @@ ${JSON.stringify(cleanLinks)}`;
                     </div>
 
                     <div className="mb-6">
-                        <h3 className="text-2xl font-black text-indigo-900 mb-6 flex items-center drop-shadow-sm"><i className="fa-solid fa-rocket text-indigo-500 mr-3"></i> 我的專案任務</h3>
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+                            <h3 className="text-2xl font-black text-indigo-900 flex items-center drop-shadow-sm">
+                                <i className="fa-solid fa-rocket text-indigo-500 mr-3"></i> 我的專案任務
+                            </h3>
+                            <button onClick={() => setIsAddProjectOpen(true)} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-md flex items-center w-full sm:w-auto justify-center">
+                                <i className="fa-solid fa-plus mr-2"></i> 新增專案
+                            </button>
+                        </div>
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {myProjects.length === 0 ? (
                                 <div className="col-span-full bg-white p-10 rounded-3xl text-center border-2 border-indigo-50 shadow-sm text-slate-500 font-bold flex flex-col items-center">
                                     <i className="fa-regular fa-folder-open text-4xl mb-3 text-slate-300"></i>
-                                    列車長還沒有指派專案給您喔！可以去找老師討論看看。
+                                    您目前還沒有建立專案，趕快點擊右上角的「新增專案」來建立吧！
                                 </div>
                             ) : myProjects.map(p => {
                                 const isUnread = p.hasUnreadMemo === true || String(p.hasUnreadMemo).toLowerCase() === 'true';
@@ -1006,6 +1049,43 @@ ${JSON.stringify(cleanLinks)}`;
                             <UsefulLinksBoard links={usefulLinks} />
                         </div>
                     </div>
+
+                    {isAddProjectOpen && (
+                        <ModalPortal>
+                            <div className="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm flex items-center justify-center z-[90] p-4 animate-fade-in">
+                                <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-modal-pop border-4 border-white">
+                                    <div className="bg-gradient-to-r from-indigo-500 to-blue-600 p-5 text-white flex justify-between items-center shadow-sm">
+                                        <h3 className="font-black text-xl flex items-center"><i className="fa-solid fa-folder-plus mr-3"></i> 新增我的專案</h3>
+                                        <button onClick={() => setIsAddProjectOpen(false)} className="hover:rotate-90 transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                                    </div>
+                                    <div className="p-6 bg-slate-50 space-y-4">
+                                        <div>
+                                            <label className="text-sm font-bold text-slate-600 block mb-1">專案名稱 *</label>
+                                            <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold outline-none focus:border-indigo-400" value={newProject.title} onChange={(e) => setNewProject({...newProject, title: e.target.value})} placeholder="請輸入專案名稱" />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-bold text-slate-600 block mb-1">目前狀態</label>
+                                            <select className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold outline-none focus:border-indigo-400" value={newProject.status} onChange={(e) => setNewProject({...newProject, status: e.target.value})}>
+                                                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-bold text-slate-600 block mb-1">指導學長姐 / 專家 (選填)</label>
+                                            <input type="text" className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-bold outline-none focus:border-indigo-400" value={newProject.mentors} onChange={(e) => setNewProject({...newProject, mentors: e.target.value})} placeholder="例如: 王大明, 林小華" />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-bold text-slate-600 block mb-1">初步說明 (至少10字) *</label>
+                                            <textarea className="w-full p-3 border-2 border-slate-200 rounded-xl bg-white font-medium resize-none outline-none focus:border-indigo-400" rows="3" value={newProject.initialDescription} onChange={(e) => setNewProject({...newProject, initialDescription: e.target.value})} placeholder="請簡單說明一下這個專案的想法... (將成為初始備忘錄)"></textarea>
+                                        </div>
+                                        <div className="flex justify-end gap-3 mt-6">
+                                            <button onClick={() => setIsAddProjectOpen(false)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 hover:bg-slate-300">取消</button>
+                                            <button onClick={handleAddProject} className="px-5 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-md active:scale-95 flex items-center"><i className="fa-solid fa-check mr-2"></i>確認新增</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </ModalPortal>
+                    )}
 
                     <ProjectNotesModal 
                         isOpen={!!viewNotesProject} 
